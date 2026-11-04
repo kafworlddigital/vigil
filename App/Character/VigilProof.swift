@@ -45,7 +45,7 @@ import QuartzCore
         DispatchQueue.main.asyncAfter(deadline:.now()+10){save(host.cursor.view,"Mac-cursor-buddy.png")}
         DispatchQueue.main.asyncAfter(deadline:.now()+11){
             if let data=try? JSONSerialization.data(withJSONObject:samples,options:.prettyPrinted){try? data.write(to:folder.appendingPathComponent("Mac-cursor-gaze.json"))}
-            func render<V:View>(_ view:V,_ name:String) {
+            @MainActor func render<V:View>(_ view:V,_ name:String) {
                 let renderer=ImageRenderer(content:view);renderer.scale=2
                 if let image=renderer.nsImage,let tiff=image.tiffRepresentation,let rep=NSBitmapImageRep(data:tiff),let png=rep.representation(using:.png,properties:[:]) {try? png.write(to:folder.appendingPathComponent(name))}
             }

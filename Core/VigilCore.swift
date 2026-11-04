@@ -31,14 +31,16 @@ public struct VisibleWindow: Sendable {
     public var owner: String
     public var bundleID: String
     public var title: String
-    public init(owner: String, bundleID: String = "", title: String = "") {
-        self.owner = owner; self.bundleID = bundleID; self.title = title
+    public var readable: Bool
+    public init(owner: String, bundleID: String = "", title: String = "", readable: Bool = true) {
+        self.owner = owner; self.bundleID = bundleID; self.title = title; self.readable = readable
     }
 }
 public enum PrivacyGuard {
     public static let displayList = ["QuickTime Player (work capture card)", "Microsoft Teams", "Outlook", "Remote Desktop / Windows App", "Chrome Remote Desktop", "Any window titled QualityAI"]
     public static func isPrivate(_ windows: [VisibleWindow]) -> Bool {
         windows.contains { w in
+            if !w.readable { return true }
             let app = (w.owner + " " + w.bundleID).lowercased()
             let title = w.title.lowercased().replacingOccurrences(of: " ", with: "")
             return ["quicktime", "microsoft teams", "msteams", "com.microsoft.teams", "outlook", "remote desktop", "remotedesktop", "windows app", "com.microsoft.rdc", "com.microsoft.windowsapp"].contains(where: app.contains)

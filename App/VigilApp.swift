@@ -104,7 +104,7 @@ struct FocusDashboard:View {
                     }.padding(22).background(.quaternary.opacity(0.45),in:RoundedRectangle(cornerRadius:20))
                 }
                 Text(state.notice).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
-                HStack{TextField("An idea for later…",text:$idea).textFieldStyle(.roundedBorder);Button("Park"){command("focusPark",idea);idea=""}.buttonStyle(.bordered).disabled(idea.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || !connected)}
+                HStack{TextField("An idea for later…",text:$idea).textFieldStyle(.roundedBorder);Button("Park"){command("focusPark",idea);idea=""}.buttonStyle(.bordered).disabled(idea.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)}
                 HStack{Text("Today").font(.headline);Spacer();Button("Parking lot (\(state.ideas.count))"){showParking=true}.font(.callout)}
                 let summary=DailySummary(sessions:sessions,ideas:state.ideas)
                 HStack(spacing:0){metric("\(summary.focusMinutes)","focus minutes");Divider();metric("\(summary.driftCount)","gentle nudges");Divider();metric("\(summary.parkedCount)","ideas parked")}.frame(height:70)

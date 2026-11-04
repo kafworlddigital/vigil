@@ -41,6 +41,7 @@ final class VigilTests:XCTestCase {
         XCTAssertTrue(PrivacyGuard.isPrivate([VisibleWindow(owner:"Chrome",title:"Chrome Remote Desktop")]))
         XCTAssertTrue(PrivacyGuard.isPrivate([VisibleWindow(owner:"Teams",bundleID:"com.microsoft.teams2")]))
         XCTAssertFalse(PrivacyGuard.isPrivate([VisibleWindow(owner:"TextEdit",title:"Personal errands")]))
+        XCTAssertTrue(PrivacyGuard.isPrivate([VisibleWindow(owner:"Chrome",readable:false)]))
     }
     func testParkingAppendPreservesExistingAndDeduplicatesRetry() throws {
         let dir=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

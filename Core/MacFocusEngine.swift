@@ -14,14 +14,17 @@ enum WorkScreenGuard {
             guard let owner=w[kCGWindowOwnerName as String] as? String else { return VisibleWindow(owner:"",title:"QualityAI — unknown window metadata") }
             let pid=w[kCGWindowOwnerPID as String] as? pid_t ?? 0
             let bundle=NSRunningApplication(processIdentifier:pid)?.bundleIdentifier ?? ""
-            return VisibleWindow(owner:owner,bundleID:bundle,title:w[kCGWindowName as String] as? String ?? "")
+            let title=w[kCGWindowName as String] as? String
+            let layer=w[kCGWindowLayer as String] as? Int ?? 0
+            let readable=title != nil || layer != 0 || pid==ProcessInfo.processInfo.processIdentifier
+            return VisibleWindow(owner:owner,bundleID:bundle,title:title ?? "",readable:readable)
         }
         guard !PrivacyGuard.isPrivate(visible) else { throw RouterError.privateScreen }
     }
     static func shareable(_ content:SCShareableContent) throws {
         let windows=content.windows.compactMap { w -> VisibleWindow? in
             guard w.isOnScreen, let app=w.owningApplication else { return nil }
-            return VisibleWindow(owner:app.applicationName,bundleID:app.bundleIdentifier,title:w.title ?? "")
+            return VisibleWindow(owner:app.applicationName,bundleID:app.bundleIdentifier,title:w.title ?? "",readable:w.title != nil || w.windowLayer != 0 || app.processID==ProcessInfo.processInfo.processIdentifier)
         }
         guard !PrivacyGuard.isPrivate(windows) else { throw RouterError.privateScreen }
     }
@@ -125,7 +128,13 @@ struct VigilScreen {
     func park(_ idea:String) {
         let clean=idea.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !clean.isEmpty else { error="What would you like to park?";return }
-        let entry=ParkedIdea(text:clean);state.ideas.append(entry);pendingIdeas.append(entry.id)
+        parkRecord(ParkedIdea(text:clean))
+    }
+    private func parkRecord(_ incoming:ParkedIdea) {
+        guard !state.ideas.contains(where:{$0.id==incoming.id}) else { return }
+        let entry=ParkedIdea(id:incoming.id,text:incoming.text,createdAt:incoming.createdAt)
+        guard !entry.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { return }
+        state.ideas.append(entry);pendingIdeas.append(entry.id)
         savePending();sync();flushParkingLot()
         state.notice="Parked for Sunday, drifter-in-chief. Back to your task?"
         notify(state.notice);sync()
@@ -159,6 +168,7 @@ struct VigilScreen {
         case "focusResume":resume()
         case "focusEnd":end()
         case "focusPark":park(packet.text ?? "")
+        case "focusParkRecord":if let text=packet.text,let record=try? JSONDecoder().decode(ParkedIdea.self,from:Data(text.utf8)){parkRecord(record)}
         case "focusSettings":if let text=packet.text,let s=try? JSONDecoder().decode(VigilSettings.self,from:Data(text.utf8)){updateSettings(s)}
         case "focusSync","focusPing":break
         default:return

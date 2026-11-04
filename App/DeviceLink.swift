@@ -85,9 +85,12 @@ final class PhoneDeviceLink:ObservableObject {
     private var retry:DispatchWorkItem?
     private var timer:Timer?
     private var receivedAt=Date.distantPast
+    private var outbox:[ParkedIdea]=[]
+    private var outboxFile:URL { file.deletingLastPathComponent().appendingPathComponent("parked-outbox.json") }
     private var file:URL { FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Vigil/summary.json") }
     init() {
         if let data=try? Data(contentsOf:file),let saved=try? JSONDecoder().decode(VigilState.self,from:data){state=saved}
+        if let data=try? Data(contentsOf:outboxFile),let saved=try? JSONDecoder().decode([ParkedIdea].self,from:data){outbox=saved}
     }
     func start() {
         guard browser==nil else { return }
@@ -121,9 +124,12 @@ final class PhoneDeviceLink:ObservableObject {
         link.onPacket={ [weak self] packet in
             guard let self else { return }
             if packet.command=="focusState",let text=packet.text,let incoming=try? JSONDecoder().decode(VigilState.self,from:Data(text.utf8)) {
-                self.state=incoming;self.fresh=true;self.receivedAt=Date()
+                self.outbox.removeAll{idea in incoming.ideas.contains(where:{$0.id==idea.id})}
+                self.state=incoming
+                for idea in self.outbox where !self.state.ideas.contains(where:{$0.id==idea.id}) {self.state.ideas.append(idea)}
+                self.fresh=true;self.receivedAt=Date();self.saveOutbox();self.flushOutbox()
                 try? FileManager.default.createDirectory(at:self.file.deletingLastPathComponent(),withIntermediateDirectories:true)
-                if let data=try? JSONEncoder().encode(incoming){try? data.write(to:self.file,options:.atomic)}
+                if let data=try? JSONEncoder().encode(self.state){try? data.write(to:self.file,options:.atomic)}
             }
             if packet.command=="nudge",let text=packet.text { self.message=text }
         }
@@ -141,7 +147,23 @@ final class PhoneDeviceLink:ObservableObject {
         do { try VigilPairing.save(record);stop();start();return true }
         catch { message="Couldn't save the pairing securely.";return false }
     }
+    private func saveOutbox(){
+        try? FileManager.default.createDirectory(at:file.deletingLastPathComponent(),withIntermediateDirectories:true)
+        if let data=try? JSONEncoder().encode(outbox){try? data.write(to:outboxFile,options:.atomic)}
+        if let data=try? JSONEncoder().encode(state){try? data.write(to:file,options:.atomic)}
+    }
+    private func flushOutbox(){
+        guard connected,fresh else{return}
+        for idea in outbox {
+            if let data=try? JSONEncoder().encode(idea){link?.send(Packet(command:"focusParkRecord",text:String(data:data,encoding:.utf8)))}
+        }
+    }
     func send(_ command:String,text:String?=nil) {
+        if command=="focusPark",let text,!text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+            let idea=ParkedIdea(text:text);outbox.append(idea);state.ideas.append(idea)
+            state.notice=connected ? "Parked for Sunday. Back to your task?":"Saved on this device. Your Mac will add it to iCloud when you reconnect."
+            saveOutbox();flushOutbox();return
+        }
         guard connected,fresh else { message="Connect your paired Mac first.";return }
         link?.send(Packet(command:command,text:text))
     }

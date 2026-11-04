@@ -17,20 +17,11 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: Vigil-build
-          run-id: 41849797194
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: approved
       - name: Generate native project with the approved icon
         run: |
           command -v xcodegen || brew install xcodegen
           xcodegen generate
           python3 scripts/check_intro_source.py
-          cp approved/Resources/AppIcon.icns Resources/AppIcon.icns
-          cp 'approved/Resources/Vigil icon.png' 'Resources/Vigil icon.png'
-          cp approved/Resources/Assets.xcassets/AppIcon.appiconset/* Resources/Assets.xcassets/AppIcon.appiconset/
           python3 scripts/check_icon.py
       - name: Verify public HTTPS without Tailscale
         run: |

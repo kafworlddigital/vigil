@@ -29,7 +29,15 @@ for family in ['iPhone','iPad']:
  device=dict(device,udid=udid,state='Shutdown')
  if device['state']!='Booted':subprocess.run(['xcrun','simctl','boot',udid],check=True)
  subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True,timeout=600)
- subprocess.run(['xcrun','simctl','install',udid,str(app)],check=True,timeout=90)
+ # First-boot system services can remain busy after bootstatus completes.
+ # Retry installation, then independently prove the launched PID survives.
+ for installAttempt in range(2):
+  try:
+   subprocess.run(['xcrun','simctl','install',udid,str(app)],check=True,timeout=300)
+   break
+  except (subprocess.TimeoutExpired,subprocess.CalledProcessError):
+   if installAttempt:raise
+   time.sleep(10)
  subprocess.run(['xcrun','simctl','ui',udid,'appearance','dark'],check=True)
  subprocess.run(['xcrun','simctl','io',udid,'orientation','landscapeLeft'],check=False,capture_output=True)
  pid=None

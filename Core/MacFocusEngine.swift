@@ -11,7 +11,7 @@ enum WorkScreenGuard {
         guard CGPreflightScreenCaptureAccess(),
               let windows=CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]] else { throw RouterError.privateScreen }
         let visible=windows.compactMap { w -> VisibleWindow? in
-            guard let owner=w[kCGWindowOwnerName as String] as? String else { return nil }
+            guard let owner=w[kCGWindowOwnerName as String] as? String else { return VisibleWindow(owner:"",title:"QualityAI — unknown window metadata") }
             let pid=w[kCGWindowOwnerPID as String] as? pid_t ?? 0
             let bundle=NSRunningApplication(processIdentifier:pid)?.bundleIdentifier ?? ""
             return VisibleWindow(owner:owner,bundleID:bundle,title:w[kCGWindowName as String] as? String ?? "")
@@ -36,7 +36,7 @@ struct VigilScreen {
         try WorkScreenGuard.shareable(content)
         try WorkScreenGuard.check()
         guard let display=content.displays.first(where:{$0.displayID==CGMainDisplayID()}) else { throw RouterError.unavailable }
-        let own=content.applications.filter{$0.processID==ProcessInfo.processInfo.processIdentifier}
+        let own=content.applications.filter{$0.processID==ProcessInfo.processInfo.processIdentifier || PrivacyGuard.isPrivate([VisibleWindow(owner:$0.applicationName,bundleID:$0.bundleIdentifier)])}
         let filter=SCContentFilter(display:display,excludingApplications:own,exceptingWindows:[])
         let config=SCStreamConfiguration()
         let scale=min(1,1100.0/Double(max(display.width,display.height)))
@@ -191,7 +191,7 @@ struct VigilScreen {
         if console?["CGSSessionScreenIsLocked"] as? Bool == true || console?["kCGSessionOnConsoleKey"] as? Bool == false { pause();return }
         state.session?.advance(max(0,delta))
         if let meeting=nextMeeting,milestones.meetingDue(id:meeting.id,start:meeting.start,now:Date()) {
-            end();state.notice="Your next meeting is in ten minutes. A good place to stop."
+            end();state.notice="Your next meeting is in \(max(1,Int(ceil(meeting.start.timeIntervalSinceNow/60)))) minutes. A good place to stop."
             onBroadcast?(Packet(command:"nudge",text:state.notice));sync();return
         }
         if milestones.advance(delta) {
@@ -202,7 +202,7 @@ struct VigilScreen {
         if session.status == .ended {
             state.history.removeAll{$0.id==session.id};state.history.insert(session,at:0);cancelWork();sync();return
         }
-        if Int(session.elapsed)%60==0 { flushParkingLot() }
+        if Int(session.elapsed)%60==0 { flushParkingLot();findMeeting() }
         // Send small heartbeat snapshots; the timer remains Mac-authoritative.
         if Int(session.elapsed)%5==0 { sync() }
         guard task==nil,session.elapsed-lastCheck>=settings.safeInterval else { return }

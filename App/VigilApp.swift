@@ -145,6 +145,7 @@ struct VigilSettingsView:View {
     var changed:(VigilSettings)->Void
     @State private var value=VigilSettings()
     @State private var key=""
+    @State private var goKey=""
     @State private var feedback=""
     @Environment(\.dismiss) private var dismiss
     var body:some View {
@@ -164,6 +165,13 @@ struct VigilSettingsView:View {
             }.disabled(key.isEmpty)
             #if os(macOS)
             Button("Read Orca API Key from Tuck"){feedback=KeyVault.importTuckIfAvailable() ? "OpenRouter key is ready.":"Tuck keeps this key private. Copy it from Tuck and paste it above."}
+            DisclosureGroup("Optional OpenCode Go wording"){
+                SecureField("Paste an existing Go key",text:$goKey).textFieldStyle(.roundedBorder)
+                Button("Save Go key securely"){
+                    do{try KeyVault.write(goKey,service:"com.kafworlddigital.vigil.opencode");goKey="";feedback="Go key saved. Used only with paid fallback enabled."}catch{feedback="Couldn't save that key."}
+                }.disabled(goKey.isEmpty)
+                Text("Uses your existing Go allowance for short reminders. Go usage is separate from the OpenRouter cost above.").font(.caption).foregroundStyle(.secondary)
+            }
             Button("Allow screen checks"){_ = CGRequestScreenCaptureAccess()}
             Text("Only non-work screens go to OpenRouter. Calendar is read only; speech stays on this Mac.").font(.caption).foregroundStyle(.secondary)
             #else

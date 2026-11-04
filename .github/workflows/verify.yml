@@ -1,6 +1,9 @@
 name: Vigil release checks
 on:
   workflow_dispatch:
+defaults:
+  run:
+    shell: bash
 permissions:
   contents: read
 jobs:
@@ -17,8 +20,6 @@ jobs:
         run: swift test --jobs 2 2>&1 | tee unit-tests.log
       - name: Release simulator build
         run: xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/simulator -jobs 2 CODE_SIGNING_ALLOWED=NO build > simulator-build.log 2>&1
-      - name: iPhone and iPad Release launch proofs
-        run: python3 scripts/prove_release.py build/simulator/Build/Products/Release-iphonesimulator/Vigil.app
       - name: Mac release build
         run: xcodebuild -project Vigil.xcodeproj -scheme VigilMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build/mac -jobs 2 CODE_SIGNING_ALLOWED=NO build > mac-build.log 2>&1
       - name: Device release build
@@ -27,6 +28,8 @@ jobs:
         run: |
           python3 scripts/check_frameworks.py build/mac/Build/Products/Release/Vigil.app
           python3 scripts/check_frameworks.py build/device/Build/Products/Release-iphoneos/Vigil.app
+      - name: iPhone and iPad Release launch proofs
+        run: python3 scripts/prove_release.py build/simulator/Build/Products/Release-iphonesimulator/Vigil.app
       - name: Package installation files
         run: |
           mkdir -p delivery

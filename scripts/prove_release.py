@@ -3,16 +3,16 @@ app=pathlib.Path(sys.argv[1]).resolve()
 subprocess.run(['python3','scripts/check_frameworks.py',str(app)],check=True)
 info=plistlib.loads((app/'Info.plist').read_bytes());bundle=info['CFBundleIdentifier']
 devices=json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','--json']))['devices']
-flat=[d for ds in devices.values() for d in ds if d.get('isAvailable')]
+flat=[d for runtime in sorted(devices,reverse=True) for d in devices[runtime] if d.get('isAvailable')]
 pathlib.Path('proofs').mkdir(exist_ok=True)
 for family in ['iPhone','iPad']:
  device=next((d for d in flat if family in d['name']),None)
  if not device:raise SystemExit('No available '+family+' simulator')
  udid=device['udid']
  if device['state']!='Booted':subprocess.run(['xcrun','simctl','boot',udid],check=True)
- subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True)
- subprocess.run(['xcrun','simctl','install',udid,str(app)],check=True)
- result=subprocess.check_output(['xcrun','simctl','launch',udid,bundle],text=True).strip()
+ subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True,timeout=420)
+ subprocess.run(['xcrun','simctl','install',udid,str(app)],check=True,timeout=90)
+ result=subprocess.check_output(['xcrun','simctl','launch',udid,bundle],text=True,timeout=60).strip()
  pid=int(result.rsplit(':',1)[1]);time.sleep(15)
  check=subprocess.run(['xcrun','simctl','spawn',udid,'launchctl','list'],capture_output=True,text=True,check=True)
  matching=[line for line in check.stdout.splitlines() if bundle in line and str(pid)==line.split()[0]]

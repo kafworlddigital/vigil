@@ -55,6 +55,7 @@ public struct RouterModel: Codable, Equatable, Sendable {
             }
             let architecture = model["architecture"] as? [String: Any]
             let modalities = architecture?["input_modalities"] as? [String] ?? []
+            guard (architecture?["output_modalities"] as? [String] ?? []).contains("text") else { return nil }
             return RouterModel(id: id, vision: modalities.contains("image"), promptPrice: input, completionPrice: output, otherPrices: other)
         }.sorted { a,b in
             if a.free != b.free { return a.free }
@@ -134,8 +135,10 @@ public actor OpenRouterClient {
         }
         // Go has its own credential, needs explicit paid opt-in, and only receives the task, never a screen.
         if allowPaid, let goKey, !goKey.isEmpty, await permitsSend() {
-            var req=URLRequest(url:URL(string:"https://opencode.ai/zen/go/v1/chat/completions")!)
+            var req=URLRequest(url:URL(string:"https://opencode.ai/inference/go/openai/v1/chat/completions")!)
             req.httpMethod="POST";req.timeoutInterval=8
+            req.setValue("Vigil/1.0",forHTTPHeaderField:"User-Agent")
+            req.setValue(UUID().uuidString,forHTTPHeaderField:"x-opencode-session")
             req.setValue("Bearer \(goKey)",forHTTPHeaderField:"Authorization")
             req.setValue("application/json",forHTTPHeaderField:"Content-Type")
             req.httpBody=try? JSONSerialization.data(withJSONObject:["model":"glm-5.3-flash","messages":messages,"max_tokens":60])

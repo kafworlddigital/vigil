@@ -1,0 +1,17 @@
+{
+  "queriedAt": "2026-11-04T02:44:22.501701+00:00",
+  "source": "https://openrouter.ai/api/v1/models",
+  "freeVisionModels": [
+    "dots-studio/dots-3-note-preview:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "google/gemma-4-31b-it:free",
+    "google/lyria-3-clip-preview",
+    "google/lyria-3-pro-preview",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "nvidia/nemotron-3.5-content-safety:free",
+    "nvidia/nemotron-3.5-super-vl:free",
+    "stealth/crouton-alpha",
+    "thinkingmachines/inkling-small:free",
+    "thinkingmachines/inkling:free"
+  ]
+}

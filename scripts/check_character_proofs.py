@@ -8,6 +8,8 @@ def pixels(name):
   if kind==b"IDAT":data+=raw[i+8:i+8+n]
   i+=12+n
  return zlib.decompress(data)
+gaze=json.loads((p/"Mac-cursor-gaze.json").read_text())
+assert len(gaze)==2 and gaze[0]["gazeX"] < -0.5 and gaze[1]["gazeX"] > 0.5, "Cursor gaze did not track both actual desktop positions: "+str(gaze)
 for a,b in [("Mac-face-left.png","Mac-face-right.png"),("Mac-animation-1.png","Mac-animation-2.png")]:
  assert pixels(a)!=pixels(b),"Character did not change: "+a
 for name in ["Mac-cursor-buddy.png","Mac-cursor-flight.png","Vigil icon.png"]: assert len(pixels(name))>100

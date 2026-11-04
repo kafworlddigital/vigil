@@ -13,7 +13,12 @@ import QuartzCore
         let oldFrame=host.panel?.frame
         let oldVisible=host.visible
         host.panel?.orderFrontRegardless()
-        func warp(_ x:Double,_ y:Double){CGWarpMouseCursorPosition(CGPoint(x:x,y:y))}
+        var samples:[[String:Double]]=[]
+        func warp(_ x:Double,_ y:Double){
+            CGWarpMouseCursorPosition(CGPoint(x:x,y:y))
+            CGEvent(mouseEventSource:nil,mouseType:.mouseMoved,mouseCursorPosition:CGPoint(x:x,y:y),mouseButton:.left)?.post(tap:.cghidEventTap)
+        }
+        func sample(){samples.append(["x":host.sampledMouse.x,"y":host.sampledMouse.y,"gazeX":host.sampledFace.gazeX,"gazeY":host.sampledFace.gazeY])}
         func save(_ view:NSView?,_ name:String){
             guard let view,let rep=view.bitmapImageRepForCachingDisplay(in:view.bounds) else{return}
             view.cacheDisplay(in:view.bounds,to:rep)
@@ -24,13 +29,14 @@ import QuartzCore
         DispatchQueue.main.asyncAfter(deadline:.now()+2){
             host.setMood(.listening);warp(40,40)
         }
-        DispatchQueue.main.asyncAfter(deadline:.now()+4){save(host.panel?.contentView,"Mac-face-left.png")}
+        DispatchQueue.main.asyncAfter(deadline:.now()+4){sample();save(host.panel?.contentView,"Mac-face-left.png")}
         DispatchQueue.main.asyncAfter(deadline:.now()+5){warp(screen.width-40,screen.height-40)}
-        DispatchQueue.main.asyncAfter(deadline:.now()+7){save(host.panel?.contentView,"Mac-face-right.png");save(host.panel?.contentView,"Mac-animation-1.png")}
+        DispatchQueue.main.asyncAfter(deadline:.now()+7){sample();save(host.panel?.contentView,"Mac-face-right.png");save(host.panel?.contentView,"Mac-animation-1.png")}
         DispatchQueue.main.asyncAfter(deadline:.now()+8){save(host.panel?.contentView,"Mac-animation-2.png");host.nudge("A little nudge. Ready for your next step?")}
         DispatchQueue.main.asyncAfter(deadline:.now()+8.3){save(host.cursor.view,"Mac-cursor-flight.png")}
         DispatchQueue.main.asyncAfter(deadline:.now()+10){save(host.cursor.view,"Mac-cursor-buddy.png")}
         DispatchQueue.main.asyncAfter(deadline:.now()+11){
+            if let data=try? JSONSerialization.data(withJSONObject:samples,options:.prettyPrinted){try? data.write(to:folder.appendingPathComponent("Mac-cursor-gaze.json"))}
             let design=VigilIconView().frame(width:1024,height:1024)
             let renderer=ImageRenderer(content:design);renderer.scale=1
             if let image=renderer.nsImage,let tiff=image.tiffRepresentation,let rep=NSBitmapImageRep(data:tiff),let png=rep.representation(using:.png,properties:[:]){try? png.write(to:folder.appendingPathComponent("Vigil icon.png"))}

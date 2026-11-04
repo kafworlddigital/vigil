@@ -41,6 +41,8 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
     private var moodRelease:DispatchWorkItem?
     private weak var server:MacDeviceServer?
     private var lastBroadcast=0.0
+    private(set) var sampledMouse=CGPoint.zero
+    private(set) var sampledFace=FaceState()
     var visible:Bool { UserDefaults.standard.object(forKey:"vigil.face.visible") as? Bool ?? true }
     func start(server:MacDeviceServer) {
         self.server=server
@@ -56,11 +58,14 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
             var face=frame
             // Use the union of desktop displays, so the added Mac face tracks every display.
             let desktop=NSScreen.screens.map(\.frame).reduce(CGRect.null){$0.union($1)}
-            let m=NSEvent.mouseLocation
+            let global=CGEvent(source:nil)?.location ?? .zero
+            let m=NSPoint(x:global.x,y:(NSScreen.screens.first?.frame.maxY ?? 0)-global.y)
+            self.sampledMouse=global
             if !desktop.isNull {
                 face.gazeX=max(-1,min(1,(m.x-desktop.midX)/(desktop.width/2)))
                 face.gazeY=max(-1,min(1,(desktop.midY-m.y)/(desktop.height/2)))
             }
+            self.sampledFace=face
             self.animator.receive(face,at:Date.timeIntervalSinceReferenceDate)
             let now=CACurrentMediaTime()
             if now-self.lastBroadcast>=1.0/30 {self.lastBroadcast=now;self.server?.broadcast(Packet(face:face))}

@@ -1084,7 +1084,8 @@ final class CursorOverlay: NSObject {
         let now = link.targetTimestamp
         let dt = lastTime == 0 ? 1.0 / 60 : min(max(now - lastTime, 1.0 / 480), 1.0 / 20)
         lastTime = now
-        let m = NSEvent.mouseLocation
+        let eventPoint = CGEvent(source: nil)?.location ?? .zero
+        let m = NSPoint(x: eventPoint.x, y: (NSScreen.screens.first?.frame.maxY ?? 0) - eventPoint.y)
         let f = window.frame
         view.step(dt: dt, now: now, mouse: CGPoint(x: m.x - f.minX, y: f.maxY - m.y))
         onFace?(view.engine.face(in: view.bounds.size, now: now))

@@ -5,15 +5,24 @@ wire=(r/'Shared/GooglyLink.swift').read_text().split('public struct Packet:')[0]
 icon=(r/'App/Character/VigilProof.swift').read_text().split('struct VigilIconView:View {')[1].rsplit('#endif',1)[0]
 sources=['import AppKit\nimport SwiftUI\n',wire,(r/'Shared/Palette.swift').read_text(),(r/'App/Character/BlobShape.swift').read_text(),(r/'App/Character/FaceView.swift').read_text(),'struct VigilIconView:View {'+icon]
 sources.append(r'''
-@MainActor func png<V:View>(_ view:V,_ url:URL) throws {
+@MainActor func png<V:View>(_ view:V,_ url:URL,opaque:Bool=false) throws {
     let renderer=ImageRenderer(content:view);renderer.scale=1
     guard let image=renderer.nsImage,let tiff=image.tiffRepresentation,
-          let bitmap=NSBitmapImageRep(data:tiff),let data=bitmap.representation(using:.png,properties:[:]) else {fatalError("Icon render failed")}
+          var bitmap=NSBitmapImageRep(data:tiff) else {fatalError("Icon render failed")}
+    if opaque {
+        guard let rgb=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:bitmap.pixelsWide,pixelsHigh:bitmap.pixelsHigh,bitsPerSample:8,samplesPerPixel:3,hasAlpha:false,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0) else {fatalError("RGB conversion failed")}
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current=NSGraphicsContext(bitmapImageRep:rgb)
+        NSColor.black.setFill();NSRect(x:0,y:0,width:rgb.pixelsWide,height:rgb.pixelsHigh).fill()
+        image.draw(in:NSRect(x:0,y:0,width:rgb.pixelsWide,height:rgb.pixelsHigh),from:.zero,operation:.sourceOver,fraction:1)
+        NSGraphicsContext.restoreGraphicsState();bitmap=rgb
+    }
+    guard let data=bitmap.representation(using:.png,properties:[:]) else {fatalError("PNG conversion failed")}
     try data.write(to:url)
 }
 try MainActor.assumeIsolated {
     let root=URL(fileURLWithPath:CommandLine.arguments[1],isDirectory:true)
-    try png(VigilIconView().frame(width:1024,height:1024),root.appendingPathComponent("Resources/Vigil icon.png"))
+    try png(VigilIconView().frame(width:1024,height:1024),root.appendingPathComponent("Resources/Vigil icon.png"),opaque:true)
     let previews=root.appendingPathComponent("proofs/icon-v2",isDirectory:true)
     try FileManager.default.createDirectory(at:previews,withIntermediateDirectories:true)
     for size in [1024,180,60,40] {

@@ -74,6 +74,7 @@ struct VigilScreen {
     private let events=EKEventStore()
     private var nextMeeting:(id:String,start:Date)?
     private var observers:[NSObjectProtocol]=[]
+    private let nudgePanel=VigilNudgePanel()
     init() {
         folder=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Vigil",isDirectory:true)
         try? FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
@@ -127,7 +128,7 @@ struct VigilScreen {
         let entry=ParkedIdea(text:clean);state.ideas.append(entry);pendingIdeas.append(entry.id)
         savePending();sync();flushParkingLot()
         state.notice="Parked for Sunday, drifter-in-chief. Back to your task?"
-        onBroadcast?(Packet(command:"nudge",text:state.notice));sync()
+        notify(state.notice);sync()
     }
     private func flushParkingLot() {
         // Only write to an existing iCloud Drive container. Never invent a local substitute cloud.
@@ -172,6 +173,7 @@ struct VigilScreen {
             onBroadcast?(Packet(command:"focusState",text:String(data:data,encoding:.utf8)))
         }
     }
+    private func notify(_ text:String) { nudgePanel.show(text);onBroadcast?(Packet(command:"nudge",text:text)) }
     private func encodedState()->String? { (try? JSONEncoder().encode(state)).flatMap{String(data:$0,encoding:.utf8)} }
     private func cancelWork() { generation=UUID();task?.cancel();task=nil }
     private func findMeeting() {
@@ -192,11 +194,11 @@ struct VigilScreen {
         state.session?.advance(max(0,delta))
         if let meeting=nextMeeting,milestones.meetingDue(id:meeting.id,start:meeting.start,now:Date()) {
             end();state.notice="Your next meeting is in \(max(1,Int(ceil(meeting.start.timeIntervalSinceNow/60)))) minutes. A good place to stop."
-            onBroadcast?(Packet(command:"nudge",text:state.notice));sync();return
+            notify(state.notice);sync();return
         }
         if milestones.advance(delta) {
             state.notice="A little stretch and a glass of water? Your task will wait."
-            onBroadcast?(Packet(command:"nudge",text:state.notice))
+            notify(state.notice)
         }
         guard let session=state.session else { return }
         if session.status == .ended {
@@ -235,7 +237,7 @@ struct VigilScreen {
                         })
                     guard generation==token,!Task.isCancelled else { return }
                     try WorkScreenGuard.check()
-                    check.nudged=true;state.notice=message;onBroadcast?(Packet(command:"nudge",text:message))
+                    check.nudged=true;state.notice=message;notify(message)
                 }
                 state.session?.checks.append(check);state.session?.detail=check.activity == .uncertain ? "Not enough context to judge" : check.activity == .onTask ? "On task" : "Checking gently before nudging"
                 let usage=await router.currentUsage();state.model=usage.lastModel;state.costUSD=usage.cost;state.requestsToday=usage.requests
@@ -251,6 +253,29 @@ struct VigilScreen {
                 sync()
             }
         }
+    }
+}
+@MainActor private final class VigilNudgePanel {
+    private var panel:NSPanel?
+    private var label:NSTextField?
+    private var hide:DispatchWorkItem?
+    func show(_ text:String) {
+        guard let screen=NSScreen.main else { return }
+        if panel==nil {
+            let panel=NSPanel(contentRect:NSRect(x:0,y:0,width:360,height:104),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
+            panel.isFloatingPanel=true;panel.hidesOnDeactivate=false;panel.level = .floating
+            panel.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary];panel.isOpaque=false;panel.backgroundColor = .clear;panel.hasShadow=true
+            let material=NSVisualEffectView(frame:NSRect(x:0,y:0,width:360,height:104));material.material = .popover;material.blendingMode = .behindWindow;material.state = .active
+            material.wantsLayer=true;material.layer?.cornerRadius=18;material.layer?.masksToBounds=true
+            let label=NSTextField(wrappingLabelWithString:"");label.font = .systemFont(ofSize:15,weight:.medium);label.frame=NSRect(x:22,y:22,width:316,height:60)
+            material.addSubview(label);panel.contentView=material;panel.ignoresMouseEvents=true
+            self.label=label;self.panel=panel
+        }
+        label?.stringValue="Vigil · "+text
+        panel?.setFrameOrigin(NSPoint(x:screen.visibleFrame.maxX-382,y:screen.visibleFrame.minY+28))
+        panel?.orderFrontRegardless();hide?.cancel()
+        let work=DispatchWorkItem{[weak self] in self?.panel?.orderOut(nil)};hide=work
+        DispatchQueue.main.asyncAfter(deadline:.now()+10,execute:work)
     }
 }
 #endif

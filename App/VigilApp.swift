@@ -214,7 +214,12 @@ struct PhoneRoot:View {
     @Environment(\.scenePhase) private var phase
     var body:some View{
         FocusDashboard(state:link.state,connected:link.connected && link.fresh,connectionText:link.connected ? (link.fresh ? "Your Mac is connected":"Reconnecting to your Mac…"):link.message,command:link.send,pairing:{showPair=true})
-            .task{link.start()}.onChange(of:phase){_,new in if new == .active{link.start();link.send("focusSync")}else{link.stop()}}
+            .task{link.start()}
+            .onChange(of:link.state.session?.status){_,status in UIApplication.shared.isIdleTimerDisabled = status == .running && phase == .active}
+            .onChange(of:phase){_,new in
+                if new == .active{link.start();link.send("focusSync");UIApplication.shared.isIdleTimerDisabled = link.state.session?.status == .running}
+                else{link.stop();UIApplication.shared.isIdleTimerDisabled=false}
+            }
             .sheet(isPresented:$showPair){PhonePairView(link:link)}
     }
 }

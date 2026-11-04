@@ -38,14 +38,19 @@ struct VigilIntroView:View {
             let wide=geometry.size.width>600 && geometry.size.height<560
             VStack(spacing:0){
                 HStack{
-                    Text("VIGIL").font(.caption.weight(.semibold)).tracking(2).foregroundStyle(.secondary)
+                    Text(wide && page==5 ? "Make \(friend) yours.":"VIGIL").font(wide && page==5 ? .title2.weight(.semibold):.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Spacer()
                     Text("\(page+1) of 6").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                     Button("Skip",action:done).font(.body.weight(.medium)).padding(.leading,14).accessibilityIdentifier("intro.skip")
                 }.padding(.horizontal,24).padding(.vertical,16)
                 ScrollView{
                     Group{
-                        if wide{
+                        if wide && page==5 {
+                            HStack(alignment:.center,spacing:24){
+                                IntroFeaturePicture(page:page).frame(width:geometry.size.width*0.28,height:190)
+                                CompanionControls(compact:true)
+                            }
+                        }else if wide{
                             HStack(alignment:.center,spacing:28){
                                 IntroFeaturePicture(page:page).frame(width:geometry.size.width*0.40,height:230)
                                 copyAndControls
@@ -183,11 +188,25 @@ struct IntroCursorBuddy:View {
 }
 
 struct CompanionControls:View {
+    var compact=false
     @AppStorage(CompanionPreferences.nameKey) private var name="Vigil"
     @AppStorage(CompanionPreferences.colourKey) private var colour="blueberry"
     @AppStorage(CompanionPreferences.nudgeKey) private var nudge="gentle"
     @AppStorage(CompanionPreferences.cornerKey) private var corner="bottomRight"
     var body:some View {
+        Group {
+        if compact {
+            Grid(alignment:.leading,horizontalSpacing:12,verticalSpacing:9){
+                GridRow{Text("Name").fontWeight(.semibold);TextField("Vigil",text:$name).textFieldStyle(.roundedBorder).frame(minHeight:34).accessibilityIdentifier("companion.name")}
+                GridRow{Text("Colour").fontWeight(.semibold);HStack(spacing:6){ForEach(CompanionColour.allCases,id:\.self){item in
+                    Button{colour=item.rawValue}label:{Circle().fill(LinearGradient(colors:item.colours.map{Color(hex:$0)},startPoint:.topLeading,endPoint:.bottomTrailing)).frame(width:28,height:28).padding(4).overlay{Circle().strokeBorder(colour==item.rawValue ? Color.primary:Color.clear,lineWidth:2)}}.buttonStyle(.plain).accessibilityLabel(item.title).accessibilityAddTraits(colour==item.rawValue ? .isSelected:[])
+                }}}
+                GridRow{Text("Nudges").fontWeight(.semibold);Picker("Nudge style",selection:$nudge){ForEach(CompanionNudge.allCases,id:\.self){Text($0.title).tag($0.rawValue)}}.pickerStyle(.segmented).labelsHidden()}
+                GridRow{Text("Corner").fontWeight(.semibold);HStack(spacing:6){ForEach(CompanionCorner.allCases,id:\.self){item in
+                    Button{corner=item.rawValue}label:{VStack(spacing:3){RoundedRectangle(cornerRadius:4).strokeBorder(.secondary.opacity(0.4),lineWidth:1).frame(height:22).overlay(alignment:item.alignment){Circle().fill(corner==item.rawValue ? Color.accentColor:Color.secondary).frame(width:7,height:7).padding(4)};Text(item.title).font(.caption2)}.frame(maxWidth:.infinity).padding(4).background(corner==item.rawValue ? Color.accentColor.opacity(0.12):Color.clear,in:RoundedRectangle(cornerRadius:6))}.buttonStyle(.plain).accessibilityLabel(item.title).accessibilityAddTraits(corner==item.rawValue ? .isSelected:[])
+                }}}
+            }.font(.callout)
+        } else {
         VStack(alignment:.leading,spacing:16){
             HStack{Text("Name").font(.headline);TextField("Vigil",text:$name).textFieldStyle(.roundedBorder).accessibilityIdentifier("companion.name")}
             VStack(alignment:.leading,spacing:8){
@@ -209,6 +228,8 @@ struct CompanionControls:View {
                 }}
             }
             Text("Saved immediately · change these in Settings any time").font(.caption).foregroundStyle(.secondary)
+        }
+        }
         }
         .onChange(of:name){_,v in if v.count>24{name=String(v.prefix(24))}}
         .onChange(of:corner){_,_ in

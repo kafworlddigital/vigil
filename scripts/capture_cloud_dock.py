@@ -1,0 +1,28 @@
+from pathlib import Path
+import ctypes as C,plistlib,subprocess,json,time,sys,hashlib
+app=Path(sys.argv[1]).resolve();info=plistlib.loads((app/'Contents/Info.plist').read_bytes());assert info['CFBundleIdentifier']=='com.kafworlddigital.vigil.mac'
+out=Path('proofs');out.mkdir(exist_ok=True)
+url=app.as_uri()+'/'
+entry={'tile-type':'file-tile','tile-data':{'file-type':41,'file-label':'Vigil','bundle-identifier':info['CFBundleIdentifier'],'file-data':{'_CFURLString':url,'_CFURLStringType':15}}}
+raw=plistlib.dumps(entry).decode();xml=raw[raw.index('<dict>'):raw.rindex('</dict>')+7]
+dock=plistlib.loads(subprocess.check_output(['defaults','export','com.apple.dock','-']))
+if not any(x.get('tile-data',{}).get('file-data',{}).get('_CFURLString')==url for x in dock.get('persistent-apps',[])):
+ subprocess.run(['defaults','write','com.apple.dock','persistent-apps','-array-add',xml],check=True)
+subprocess.run(['defaults','write','com.apple.dock','autohide','-bool','false'],check=True)
+subprocess.run(['killall','Dock'],capture_output=True);time.sleep(7)
+cg=C.CDLL('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics');cf=C.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
+cg.CGWindowListCopyWindowInfo.argtypes=[C.c_uint32,C.c_uint32];cg.CGWindowListCopyWindowInfo.restype=C.c_void_p
+cf.CFPropertyListCreateData.argtypes=[C.c_void_p,C.c_void_p,C.c_long,C.c_ulong,C.c_void_p];cf.CFPropertyListCreateData.restype=C.c_void_p
+cf.CFDataGetLength.argtypes=[C.c_void_p];cf.CFDataGetLength.restype=C.c_long
+cf.CFDataGetBytePtr.argtypes=[C.c_void_p];cf.CFDataGetBytePtr.restype=C.c_void_p;cf.CFRelease.argtypes=[C.c_void_p]
+a=cg.CGWindowListCopyWindowInfo(1,0);d=cf.CFPropertyListCreateData(None,a,100,0,None);windows=plistlib.loads(C.string_at(cf.CFDataGetBytePtr(d),cf.CFDataGetLength(d)));cf.CFRelease(d);cf.CFRelease(a)
+found=[]
+for w in windows:
+ b=w.get('kCGWindowBounds',{});width=b.get('Width',0);height=b.get('Height',0)
+ if w.get('kCGWindowOwnerName')=='Dock' and max(width,height)>200 and 20<min(width,height)<250:found.append(w)
+assert found,'No real Dock window found on the cloud Mac'
+window=max(found,key=lambda w:w['kCGWindowBounds']['Width']*w['kCGWindowBounds']['Height'])
+subprocess.run(['screencapture','-x','-l',str(window['kCGWindowNumber']),str(out/'Cloud-Mac-Dock.png')],check=True,timeout=30)
+assert (out/'Cloud-Mac-Dock.png').stat().st_size>1000
+(out/'Cloud-Mac-Dock.json').write_text(json.dumps({'environment':'GitHub hosted macOS test machine; not Keith desktop','bundle':info['CFBundleIdentifier'],'build':info['CFBundleVersion'],'iconSHA256':hashlib.sha256((app/'Contents/Resources/AppIcon.icns').read_bytes()).hexdigest(),'appPath':str(app),'scope':'Actual Dock window only'},indent=2))
+print('Actual cloud Mac Dock screenshot captured; clearly labelled as cloud proof.')

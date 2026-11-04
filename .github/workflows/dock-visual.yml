@@ -1,0 +1,40 @@
+name: Vigil cloud Dock visual proof
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  dock:
+    runs-on: macos-26-intel
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ inputs.source_run }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the finished release source
+        run: |
+          gh run view "$SOURCE_RUN" --json status,conclusion,headSha > source.json
+          python3 -c 'import json,os; d=json.load(open("source.json")); assert d=={"status":"completed","conclusion":"success","headSha":os.environ["SOURCE_SHA"]}'
+          gh run download "$SOURCE_RUN" --name Vigil-release-evidence --dir source-evidence
+          mkdir app
+          ditto -x -k source-evidence/delivery/Vigil-Mac.zip app
+      - name: Capture the actual Dock icon on the cloud Mac
+        run: python3 scripts/capture_cloud_dock.py app/Vigil.app
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Vigil-cloud-Dock-proof
+          retention-days: 3
+          path: |
+            proofs/
+            source.json

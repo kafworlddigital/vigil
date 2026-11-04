@@ -41,6 +41,7 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
     private var moodRelease:DispatchWorkItem?
     private weak var server:MacDeviceServer?
     private var lastBroadcast=0.0
+    var rendererFixtureGaze:CGPoint?
     private(set) var sampledMouse=CGPoint.zero
     private(set) var sampledFace=FaceState()
     var visible:Bool { UserDefaults.standard.object(forKey:"vigil.face.visible") as? Bool ?? true }
@@ -65,6 +66,7 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
                 face.gazeX=max(-1,min(1,(m.x-desktop.midX)/(desktop.width/2)))
                 face.gazeY=max(-1,min(1,(desktop.midY-m.y)/(desktop.height/2)))
             }
+            if let fixture=self.rendererFixtureGaze {face.gazeX=fixture.x;face.gazeY=fixture.y}
             self.sampledFace=face
             self.animator.receive(face,at:Date.timeIntervalSinceReferenceDate)
             let now=CACurrentMediaTime()

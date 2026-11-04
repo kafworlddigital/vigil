@@ -1,21 +1,15 @@
-# Vigil build 3 delivery — device retries in progress
+# Vigil build 4 — release checks in progress
 
-Verified application source: `e6849f99b3adf97fc2ec7f51bc9774e78664721f`. Successful cloud run: https://github.com/kafworlddigital/vigil/actions/runs/41805466041.
+No build 4 installation has taken place. Keith’s accepted Mac installation remains build 3; the last independently verified iPhone installation was build 3. The physical iPad installation is not yet verified. No new device retry window has started.
 
-All 19 unit tests passed. Mac, iOS device and simulator Release builds and framework checks passed. Fresh iPhone and iPad simulators installed and launched Release, independently retained their processes for 15 seconds, and produced differing one-second animation frames.
+Application builds: commit `51396a329f7ecdc394ee67e18d876d99239e8464`, [build run 41849797194](https://github.com/kafworlddigital/vigil/actions/runs/41849797194). Its build job passed all 27 tests, all six Release builds, both 15-second Mac launches, Apple silicon checks and framework inspection. The complete workflow did not pass: simulator process checks timed out. The finished apps are preserved in its `Vigil-build` artifact.
 
-The signed app separately passed the real-Mac gate before installation: actual scripted cursor movement, opposite gaze directions, differing one-second frames, a live cursor buddy/bubble and manual visual inspection. These are own live rendered views. Cloud Mac eye images are explicitly renderer fixtures; simulator and fixture images are not physical-device acceptance.
+The current UI-only recovery harness is commit `72f9c0c4352a9b5f07ed52e71d3a54f37474c884`. It verifies the successful build job and unchanged application source before reusing those apps. It opens the real Simulator window and retains the install, same-process 15-second survival, animation, screenshot and human review gates. [Native ARM recovery](https://github.com/kafworlddigital/vigil/actions/runs/41857643168) and [Intel recovery](https://github.com/kafworlddigital/vigil/actions/runs/41857651508) are pending. No pending or failed run is release approval.
 
-Mac: installed in /Applications/Vigil.app, build 3, strict signature and binary readback verified, post-install process survived 15 seconds. Previous accepted app preserved privately.
+Icon v2 has been generated in the app builds with a whole 70%-width face, black margins and purple-blue glow. The iOS master is opaque RGB. Native rounded-mask previews exist at 1024, 180, 60 and 40 pixels. Final home-screen and Dock review, real Mac acceptance, installation and the source asset readback remain required.
 
-iPhone: installed version 1.0 build 3; independent native inventory confirms build 3. Physical launch is locked, so physical UI, pairing and voice are unverified.
+The stateless HTTPS brain is deployed on Contabo and answered from outside Tailscale. The last authenticated synthetic health snapshot confirmed 15 responding models: NVIDIA 6, Ollama Cloud 5 and OpenRouter 4. The saved Go key was rejected; Zen reported limits/access errors. These are time-specific results, not a promise of continuing availability. The real failover check injected errors for the first two providers and received an actual answer from the third in 0.832 seconds. Six server tests also passed.
 
-iPad: currently unreachable. A bounded install loop is retrying at ten-minute intervals until approximately 11:36 UTC on 4 November 2026. This is pending, not successful delivery. No permanent schedule was created.
+The six skippable intro cards, Settings replay, version/build, model dots, Test all now, Help and email-composition link are implemented. Macy’s targets use separate bundle IDs, storage, iCloud parking files, preferences, Keychain scope and pairing discovery; both display “Vigil”. Her model enrolment requires the actual Apple app records and verified StoreKit transaction. That TestFlight enrolment has not yet been accepted on a physical device.
 
-OpenRouter answered synthetic free vision and text tests; the signed Mac app's actual Test connection also answered with dots-studio/dots-3-note-preview:free. OpenCode's actual app test and official CLI report the free-usage-limit error. No paid fallback was enabled to make a test pass. Keys and private screen content were not used in public CI.
-
-The Contabo brain move remains gated behind the incomplete second stage, as ordered. No brain service or private access route has been deployed; NVIDIA NIM and Ollama Cloud integration has not been started. The apps retain the existing direct provider/local data path.
-
-The original Bluey character renderer, animator, shape/crown/palette, cursor engine/art/trails/bubbles, chirp and timeline/detail views were restored directly from upstream. The independent Mac face, size/visibility/Option-drag controls and Test connection are included; Vigil parking lot, calendar, history and free models remain. See CHARACTER.md for provenance.
-
-The Desktop icon preview is 1024px, rendered from the actual upstream face and checked at 60px. The Desktop guide has eight plain lines. Private receipts and actual device images are not published. Held recovery volumes were not accessed or repaired.
+Macy’s TestFlight upload is pending Apple app-record setup. No testers or external groups have been added and no build has been uploaded. Only Keith is authorised as a tester. The ready-for-check Desktop note has not been created. Credentials, device inventories, private screenshots and private provider receipts are kept outside this public repository. Held recovery volumes have not been accessed.

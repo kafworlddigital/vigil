@@ -63,17 +63,10 @@ enum VigilEdition {
         guard !testing,let router else{return};testing=true;defer{testing=false}
         await router.setKeys(credentials())
         models=await router.snapshot()
-        // Both health passes run concurrently; no screen, task or history is sent by a probe.
-        async let remote:[ModelHealth]? = brainHealth()
-        await router.probeAll()
-        var states=await router.snapshot()
-        if let cloud=await remote {
-            for state in cloud {
-                if let index=states.firstIndex(where:{$0.id==state.id}) {
-                    if state.status=="green" || states[index].status != "green" {states[index]=state}
-                }else{states.append(state)}
-            }
-        }
+        // The server probes models in parallel. Direct probes are only needed if it is unreachable.
+        if let cloud=await brainHealth() {await router.importHealth(cloud)}
+        else {await router.probeAll()}
+        let states=await router.snapshot()
         models=states.sorted{a,b in a.provider==b.provider ? a.model<b.model:a.provider<b.provider}
         let count=models.filter{$0.status=="green"}.count
         message="\(count) remote models ready · on-device fallback ready."

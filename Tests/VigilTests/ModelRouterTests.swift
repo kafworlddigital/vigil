@@ -50,6 +50,15 @@ final class ModelRouterTests:XCTestCase {
         calls=await mock.calls;XCTAssertEqual(calls.count,2)
         let healthy=await restarted.snapshot();XCTAssertEqual(healthy.first?.status,"green")
     }
+    func testBrainHealthRanksDirectFallbackAndPreservesSharedCooldown() async throws {
+        let mock=HealthTransport();let router=ModelHealthRouter(candidates:[go,or,nim],keys:keys,transport:mock)
+        var limited=ModelHealth(go);limited.status="amber";limited.checkedAt=Date();limited.cooldownUntil=Date().addingTimeInterval(3600)
+        var healthy=ModelHealth(nim);healthy.status="green";healthy.checkedAt=Date();healthy.latency=0.1
+        await router.importHealth([limited,healthy])
+        let reply=try await router.complete(ModelPrompt(text:"synthetic"))
+        XCTAssertEqual(reply.provider,"nvidia");let calls=await mock.calls;XCTAssertEqual(calls,["nvidia"])
+        let states=await router.snapshot();XCTAssertEqual(states.first{$0.provider=="opencode-go"}?.cooldownUntil,limited.cooldownUntil)
+    }
     func testNoOpenAIOrGPTOrUnknownEndpointIsPermitted() {
         for model in ["openai/o1","gpt-6","vendor/GPT-other","codex-something"] {
             XCTAssertFalse(ModelCandidate(provider:"openrouter",model:model,vision:true,endpoint:or.endpoint).permitted)

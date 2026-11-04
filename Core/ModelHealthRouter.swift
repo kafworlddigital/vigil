@@ -68,6 +68,15 @@ public actor ModelHealthRouter {
         for candidate in self.candidates where health[candidate.id]==nil { health[candidate.id]=ModelHealth(candidate) }
     }
     public func setKeys(_ value:[String:String]) { keys=value }
+    /// Reuse the authenticated brain's checks instead of spending the same allowance twice.
+    public func importHealth(_ records:[ModelHealth]) {
+        for state in records {
+            guard let candidate=candidates.first(where:{$0.id==state.id}),candidate.provider==state.provider,candidate.model==state.model,
+                  ["green","amber","red"].contains(state.status) else{continue}
+            if (state.checkedAt ?? .distantPast)>=(health[state.id]?.checkedAt ?? .distantPast) {health[state.id]=state}
+        }
+        persist()
+    }
     public func snapshot()->[ModelHealth] { candidates.compactMap{health[$0.id]}.sorted{ a,b in
         let ranks=["green":0,"amber":1,"red":2]
         if ranks[a.status,default:2] != ranks[b.status,default:2] { return ranks[a.status,default:2]<ranks[b.status,default:2] }

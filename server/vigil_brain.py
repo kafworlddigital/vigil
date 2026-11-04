@@ -183,7 +183,10 @@ def serve():
                 self.reply(200,{'token':token}) if token else self.reply(401,{'error':'invalid or expired activation code'});return
             if not registry.valid(self.headers.get('Authorization','').removeprefix('Bearer ')):self.reply(401,{'error':'auth'});return
             if self.path.endswith('/test'):
-                router.probe_all();self.reply(200,router.snapshot());return
+                router.probe_all()
+                deadline=time.monotonic()+22
+                while router.probing and time.monotonic()<deadline:time.sleep(.1)
+                self.reply(200,router.snapshot());return
             if not self.path.endswith('/answer'):self.reply(404,{'error':'unknown route'});return
             if not isinstance(data,dict) or not isinstance(data.get('text'),str) or len(data['text'])>14000:self.reply(400,{'error':'invalid prompt'});return
             if data.get('mime','image/jpeg') not in ['image/jpeg','image/png']:self.reply(400,{'error':'invalid image'});return

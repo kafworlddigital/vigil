@@ -9,7 +9,7 @@ struct VigilIntroView:View {
         ("iphone.landscape","Pair, then prop it sideways","Open Pair on your Mac, then scan its code on your iPhone on the same Wi-Fi. Prop the phone sideways under your screen."),
         ("mic","Hold to talk","Hold the face while you say your task. Let go when you're finished. Speech stays on this device."),
         ("tray","Give ideas a parking space","Say ‘park this’ followed by an idea, or type it in the parking lot. Your ideas will be waiting when you're ready."),
-        ("hand.raised","Your screen stays yours","Screenshots are never saved. Eligible screen checks are sent briefly to a model; private work windows skip the check. Offline checks use a simple local heuristic.")
+        ("hand.raised","Your screen stays yours","Eligible checks send your task, screen text and image to a model. Vigil saves no screenshots. Protected work windows skip checks; speech stays on-device.")
     ]
     var body:some View {
         GeometryReader{geometry in

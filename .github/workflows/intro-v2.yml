@@ -1,0 +1,143 @@
+name: Vigil intro v2 release checks
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: choice
+        default: macos-26-intel
+        options: [macos-26-intel, macos-26, macos-15]
+defaults:
+  run:
+    shell: bash
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-build
+          run-id: 41849797194
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: approved
+      - name: Generate native project with the approved icon
+        run: |
+          command -v xcodegen || brew install xcodegen
+          xcodegen generate
+          python3 scripts/check_intro_source.py
+          cp approved/Resources/AppIcon.icns Resources/AppIcon.icns
+          cp 'approved/Resources/Vigil icon.png' 'Resources/Vigil icon.png'
+          cp approved/Resources/Assets.xcassets/AppIcon.appiconset/* Resources/Assets.xcassets/AppIcon.appiconset/
+          python3 scripts/check_icon.py
+      - name: Verify public HTTPS without Tailscale
+        run: |
+          curl --fail --silent --show-error --max-time 25 https://hermes-ovh.tail33f19f.ts.net:8443/vigil/ready -o brain-public.json
+          python3 -c 'import json; d=json.load(open("brain-public.json")); assert d.get("service")=="Vigil" and d.get("ready") is True'
+      - name: Unit tests
+        run: |
+          set -euo pipefail
+          swift test --jobs 2 2>&1 | tee unit-tests.log
+      - name: Build both editions for all platforms
+        run: |
+          set -euo pipefail
+          xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/simulator -jobs 2 CODE_SIGNING_ALLOWED=NO build > simulator-build.log 2>&1
+          xcodebuild -project Vigil.xcodeproj -scheme VigilMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build/mac -jobs 2 CODE_SIGNING_ALLOWED=NO build > mac-build.log 2>&1
+          xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device -jobs 2 CODE_SIGNING_ALLOWED=NO build > device-build.log 2>&1
+          xcodebuild -project Vigil.xcodeproj -scheme VigilMacy -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/macy-simulator -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-simulator-build.log 2>&1
+          xcodebuild -project Vigil.xcodeproj -scheme VigilMacy -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/macy-device -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-device-build.log 2>&1
+          xcodebuild -project Vigil.xcodeproj -scheme VigilMacyMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build/macy-mac -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-mac-build.log 2>&1
+      - name: Framework and Mac launch gates
+        run: |
+          for app in build/mac/Build/Products/Release/Vigil.app build/macy-mac/Build/Products/Release/Vigil.app; do
+            proofdir="$PWD/proofs"
+            if [[ "$app" == *macy-mac* ]]; then proofdir="$PWD/proofs/Macy-Mac"; fi
+            lipo "$app/Contents/MacOS/Vigil" -verify_arch arm64
+            python3 scripts/check_frameworks.py "$app"
+            codesign --force --deep --sign - "$app"
+            open -g -n "$app" --args --vigil-proof "$proofdir" --vigil-renderer-fixture --vigil-skip-intro --vigil-intro-proof "$proofdir/intro-v2"
+            sleep 24
+            pgrep -f "/$app/Contents/MacOS/Vigil"
+            python3 scripts/check_character_proofs.py "$proofdir" --allow-renderer-fixture
+            python3 scripts/check_intro_images.py "$proofdir/intro-v2"
+            pkill -x Vigil || true
+          done
+          for app in build/device/Build/Products/Release-iphoneos/Vigil.app build/macy-device/Build/Products/Release-iphoneos/Vigil.app; do
+            python3 scripts/check_frameworks.py "$app"
+          done
+      - name: Preserve finished apps before simulator work
+        run: |
+          mkdir -p delivery simulator-input
+          ditto -c -k --sequesterRsrc --keepParent build/mac/Build/Products/Release/Vigil.app delivery/Vigil-Mac.zip
+          ditto -c -k --sequesterRsrc --keepParent build/device/Build/Products/Release-iphoneos/Vigil.app delivery/Vigil-iOS.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macy-mac/Build/Products/Release/Vigil.app delivery/Vigil-Macy-Mac.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macy-device/Build/Products/Release-iphoneos/Vigil.app delivery/Vigil-Macy-iOS.zip
+          ditto -c -k --sequesterRsrc --keepParent build/simulator/Build/Products/Release-iphonesimulator/Vigil.app simulator-input/Keith.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macy-simulator/Build/Products/Release-iphonesimulator/Vigil.app simulator-input/Macy.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Vigil-build
+          retention-days: 3
+          path: |
+            delivery/
+            simulator-input/
+            proofs/
+            *-build.log
+            unit-tests.log
+            brain-public.json
+            Resources/Vigil icon.png
+            Resources/AppIcon.icns
+            Resources/Assets.xcassets/AppIcon.appiconset/
+  simulator:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [iPhone, iPad]
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 35
+    env:
+      VIGIL_SIM_FAMILY: ${{ matrix.family }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-build
+          path: compiled
+      - name: Install and prove both editions on a fresh cloud Mac
+        run: |
+          mkdir -p simulator-stage/Keith simulator-stage/Macy proofs
+          ditto -x -k compiled/simulator-input/Keith.zip simulator-stage/Keith
+          ditto -x -k compiled/simulator-input/Macy.zip simulator-stage/Macy
+          python3 scripts/prove_release.py simulator-stage/Keith/Vigil.app
+          python3 scripts/prove_release.py simulator-stage/Macy/Vigil.app Macy
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Vigil-${{ matrix.family }}-proofs
+          retention-days: 3
+          path: proofs/
+  release-evidence:
+    needs: [build, simulator]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-build
+          path: combined
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-iPhone-proofs
+          path: combined/proofs
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-iPad-proofs
+          path: combined/proofs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vigil-release-evidence
+          retention-days: 3
+          path: combined/

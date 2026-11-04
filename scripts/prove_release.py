@@ -74,8 +74,8 @@ for family in families:
  screenshot(udid,f'proofs/{prefix}{family}-animation-2.png')
  assert pathlib.Path(f'proofs/{prefix}{family}-Release.png').read_bytes()!=pathlib.Path(f'proofs/{prefix}{family}-animation-2.png').read_bytes(), 'Static phone face'
  pathlib.Path(f'proofs/{prefix}{family}-launch.json').write_text(json.dumps({'family':family,'simulator':device['name'],'udid':udid,'bundle':bundle,'pid':pid,'survivedSeconds':15,'process':matching,'configuration':'Release'},indent=2))
- # Capture actual production intro and Settings views in this fresh simulator.
- for screen in ['intro','settings','help']:
+ # Capture every production intro card and Settings on the same proved binary.
+ for screen in ['intro-1','intro-2','intro-3','intro-4','intro-5','intro-6','settings','help']:
   subprocess.run(['xcrun','simctl','launch','--terminate-running-process',udid,bundle,'--vigil-screen',screen,'--vigil-skip-intro'],check=True,timeout=120)
   time.sleep(15 if screen=='settings' else 3)
   screenshot(udid,f'proofs/{prefix}{family}-{screen}.png')

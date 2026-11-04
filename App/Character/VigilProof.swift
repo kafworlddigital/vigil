@@ -6,6 +6,7 @@ import QuartzCore
 @MainActor enum VigilProof {
     static func begin(host:VigilCharacterHost){
         let args=ProcessInfo.processInfo.arguments
+        VigilIntroCapture.begin()
         guard let i=args.firstIndex(of:"--vigil-proof"),i+1<args.count else{return}
         let folder=URL(fileURLWithPath:args[i+1],isDirectory:true)
         try? FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true)

@@ -9,12 +9,25 @@ struct PhoneFaceScreen:View {
     @GestureState private var held=false
     @State private var dashboard=false
     @State private var inspect=false
+    @AppStorage(CompanionPreferences.cornerKey) private var corner="bottomRight"
+    @State private var lastTouch=CGPoint.zero
     @Environment(\.scenePhase) private var phase
     var body:some View {
         ZStack {
-            FaceView(animator:link.face)
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance:0).updating($held){_,value,_ in value=true})
+            GeometryReader { geometry in
+                let selected=CompanionCorner(rawValue:corner) ?? .bottomRight
+                let width=min(520,max(220,geometry.size.width*0.52))
+                FaceView(animator:link.face,transparent:true)
+                    .frame(width:width,height:width*390/844)
+                    .frame(maxWidth:.infinity,maxHeight:.infinity,alignment:selected.alignment)
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance:0).updating($held){_,value,_ in value=true}
+                        .onChanged{value in
+                            let cx=selected.left ? width/2:geometry.size.width-width/2
+                            let cy=selected.top ? width*390/844/2:geometry.size.height-width*390/844/2
+                            link.face.touchGaze=CGPoint(x:(value.location.x-cx)/max(width/2,1),y:(value.location.y-cy)/max(width/3,1))
+                        }.onEnded{_ in link.face.touchGaze=nil})
+            }
             VStack(alignment:.leading,spacing:6){
                 HStack(alignment:.top){
                     VStack(alignment:.leading,spacing:3){

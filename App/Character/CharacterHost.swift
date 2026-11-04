@@ -84,8 +84,15 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         let h=w*390/844
         let savedX=UserDefaults.standard.object(forKey:"vigil.face.x") as? Double
         let savedY=UserDefaults.standard.object(forKey:"vigil.face.y") as? Double
-        let position=NSPoint(x:savedX ?? screen.visibleFrame.maxX-w-24,y:savedY ?? screen.visibleFrame.minY+24)
+        let corner=CompanionPreferences().corner
+        let area=screen.visibleFrame
+        let position=NSPoint(x:savedX ?? (corner.left ? area.minX+24:area.maxX-w-24),y:savedY ?? (corner.top ? area.maxY-h-24:area.minY+24))
         p.setFrame(NSRect(origin:position,size:NSSize(width:w,height:h)),display:true)
+    }
+    func placeInCorner(){
+        UserDefaults.standard.removeObject(forKey:"vigil.face.x")
+        UserDefaults.standard.removeObject(forKey:"vigil.face.y")
+        resize()
     }
     func setVisible(_ show:Bool){UserDefaults.standard.set(show,forKey:"vigil.face.visible");if show{panel?.orderFrontRegardless()}else{panel?.orderOut(nil)}}
     func showMoveHint(){cursor.view.caption="Hold Option and drag my face to move me. Ordinary clicks pass through.";DispatchQueue.main.asyncAfter(deadline:.now()+7){[weak self] in self?.cursor.view.caption=nil}}
@@ -106,10 +113,11 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
     func setMood(_ mood:Mood){Settings.shared.mood=mood;cursor.view.engine.brainMood=mood}
     func releaseMood(){cursor.view.engine.brainMood=nil;Settings.shared.mood = .listening}
     func nudge(_ text:String,target:CGPoint?=nil){
-        moodRelease?.cancel();setMood(.surprised)
+        moodRelease?.cancel();setMood(CompanionPreferences().nudge == .quiet ? .listening:.surprised)
         cursor.view.caption=text
         // With no verified OCR target, point at Vigil's own face, never invent a desktop target.
-        if let target { cursor.mode = .pinned(target) }
+        if CompanionPreferences().nudge == .quiet { cursor.goHome() }
+        else if let target { cursor.mode = .pinned(target) }
         else if let p=panel,let screen=NSScreen.screens.first {
             cursor.mode = .pinned(CGPoint(x:p.frame.midX-screen.frame.minX,y:screen.frame.maxY-p.frame.midY))
         }

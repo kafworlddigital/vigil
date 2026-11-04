@@ -3,7 +3,7 @@ import pathlib,subprocess,json
 r=pathlib.Path(__file__).resolve().parent.parent
 wire=(r/'Shared/GooglyLink.swift').read_text().split('public struct Packet:')[0]
 icon=(r/'App/Character/VigilProof.swift').read_text().split('struct VigilIconView:View {')[1].rsplit('#endif',1)[0]
-sources=['import AppKit\nimport SwiftUI\n',wire,(r/'Shared/Palette.swift').read_text(),(r/'App/Character/BlobShape.swift').read_text(),(r/'App/Character/FaceView.swift').read_text(),'struct VigilIconView:View {'+icon]
+sources=['import AppKit\nimport SwiftUI\n',wire,(r/'Core/CompanionPreferences.swift').read_text(),(r/'Shared/Palette.swift').read_text(),(r/'App/Character/BlobShape.swift').read_text(),(r/'App/Character/FaceView.swift').read_text(),'struct VigilIconView:View {'+icon]
 sources.append(r'''
 @MainActor func png<V:View>(_ view:V,_ url:URL,opaque:Bool=false) throws {
     let renderer=ImageRenderer(content:view);renderer.scale=1

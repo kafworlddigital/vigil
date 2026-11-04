@@ -11,7 +11,7 @@ public enum Palette {
     public static let inkSoft: UInt32 = 0xB9B2CC
     public static let panel: UInt32 = 0x1E1B29
 
-    public static let gradient: [UInt32] = [berry1, berry2, berry3, berry4]
+    public static var gradient: [UInt32] { CompanionPreferences().colour.colours }
     public static let gradientStops: [Double] = [0, 0.34, 0.68, 1]
 
     public static func rgb(_ hex: UInt32) -> (r: Double, g: Double, b: Double) {

@@ -80,6 +80,8 @@ struct FocusDashboard:View {
     @State private var idea=""
     @State private var showParking=false
     @State private var showHistory=false
+    @State private var showAsk=false
+    @AppStorage(CompanionPreferences.nameKey) private var companionName="Vigil"
     @State private var showSettings=false
     private var sessions:[FocusSession] {
         guard let s=state.session,!state.history.contains(where:{$0.id==s.id}) else{return state.history}
@@ -88,7 +90,7 @@ struct FocusDashboard:View {
     var body:some View {
         ScrollView {
             VStack(alignment:.leading,spacing:24){
-                HStack{VStack(alignment:.leading,spacing:5){Text("Vigil").font(.largeTitle.weight(.semibold));Text("A little company for the task ahead.").font(.subheadline).foregroundStyle(.secondary)};Spacer();Button(action:{showSettings=true}){Image(systemName:"gearshape")}.buttonStyle(.plain).accessibilityLabel("Settings")}
+                HStack{VStack(alignment:.leading,spacing:5){Text(CompanionPreferences().name).font(.largeTitle.weight(.semibold));Text("A little company for the task ahead.").font(.subheadline).foregroundStyle(.secondary)};Spacer();Button(action:{showSettings=true}){Image(systemName:"gearshape")}.buttonStyle(.plain).accessibilityLabel("Settings")}
                 HStack(spacing:7){Circle().fill(connected ? Color.green:Color.orange).frame(width:7,height:7);Text(connectionText).font(.caption).foregroundStyle(.secondary);Spacer();Button("Pair",action:pairing).font(.caption)}
                 HoldToTalk(speech:speech).frame(maxWidth:.infinity)
                 if !speech.message.isEmpty{Text(speech.message).font(.callout).foregroundStyle(.secondary)}
@@ -116,11 +118,12 @@ struct FocusDashboard:View {
                 HStack{Text("Today").font(.headline);Spacer();Button("Parking lot (\(state.ideas.count))"){showParking=true}.font(.callout)}
                 let summary=DailySummary(sessions:sessions,ideas:state.ideas)
                 HStack(spacing:0){metric("\(summary.focusMinutes)","focus minutes");Divider();metric("\(summary.driftCount)","gentle nudges");Divider();metric("\(summary.parkedCount)","ideas parked")}.frame(height:70)
-                Button("Focus history"){showHistory=true}
+                HStack{Button("Ask \(CompanionPreferences().name)"){showAsk=true}.buttonStyle(.borderedProminent);Spacer();Button("Focus history"){showHistory=true}}
                 Text("Work screens stay private. Ideas can wait for Sunday.").font(.caption).foregroundStyle(.secondary).frame(maxWidth:.infinity)
             }.padding(24).frame(maxWidth:700).frame(maxWidth:.infinity)
         }.tint(Color(red:0.37,green:0.42,blue:0.71))
         .onAppear{speech.onResult=voice;calendar.refresh()}
+        .sheet(isPresented:$showAsk){VigilAskView()}
         .sheet(isPresented:$showHistory){VigilHistoryView(sessions:sessions)}
         .sheet(isPresented:$showParking){ParkingView(ideas:state.ideas)}
         .sheet(isPresented:$showSettings){VigilSettingsView(state:state){value in
@@ -173,6 +176,7 @@ struct VigilSettingsView:View {
             Button("Help"){showHelp=true}
             Link("Report a problem",destination:VigilSupport.reportURL)
             Button("Show intro again"){showIntro=true}
+            CompanionControls()
             ModelHealthView()
             Text("Your included Go plan, free models and on-device help. No OpenAI or GPT models.").font(.caption).foregroundStyle(.secondary)
             LabeledContent("Model in use",value:state.model)
@@ -197,7 +201,7 @@ struct VigilSettingsView:View {
             Divider();Text("Work privacy guard").font(.headline)
             ForEach(PrivacyGuard.displayList,id:\.self){Text($0).font(.callout)}
             Text("Any visible work window skips the whole check. It is recorded as private (skipped), never off-task.").font(.caption).foregroundStyle(.secondary)
-        }.padding(24).frame(maxWidth:600,alignment:.leading)}.frame(minWidth:300,minHeight:300).sheet(isPresented:$showHelp){VigilHelpView()}.sheet(isPresented:$showIntro){VigilIntroView{showIntro=false}.frame(idealWidth:520,idealHeight:440).interactiveDismissDisabled()}.onAppear{value=state.settings;feedback="On-device help is ready. Connect this device to use the server."}
+        }.padding(24).frame(maxWidth:600,alignment:.leading)}.frame(minWidth:300,minHeight:300).sheet(isPresented:$showHelp){VigilHelpView()}.sheet(isPresented:$showIntro){VigilIntroView{showIntro=false}.frame(idealWidth:720,idealHeight:700).interactiveDismissDisabled()}.onAppear{value=state.settings;feedback="On-device help is ready. Connect this device to use the server."}
     }
 }
 #if os(macOS)

@@ -31,6 +31,7 @@ jobs:
           sleep 15
           pgrep -f '/Vigil.app/Contents/MacOS/Vigil'
           python3 scripts/check_character_proofs.py proofs --allow-renderer-fixture
+          pkill -x Vigil || true
       - name: Device release build
         run: xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device -jobs 2 CODE_SIGNING_ALLOWED=NO build > device-build.log 2>&1
       - name: Inspect embedded frameworks

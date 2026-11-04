@@ -10,7 +10,7 @@ for family in ['iPhone','iPad']:
  if not device:raise SystemExit('No available '+family+' simulator')
  udid=device['udid']
  if device['state']!='Booted':subprocess.run(['xcrun','simctl','boot',udid],check=True)
- subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True,timeout=420)
+ subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True,timeout=600)
  subprocess.run(['xcrun','simctl','install',udid,str(app)],check=True,timeout=90)
  subprocess.run(['xcrun','simctl','ui',udid,'appearance','dark'],check=True)
  subprocess.run(['xcrun','simctl','io',udid,'orientation','landscapeLeft'],check=False,capture_output=True)

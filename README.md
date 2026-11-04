@@ -1,11 +1,18 @@
 # Vigil
 
-A calm native focus companion for Mac, iPhone and iPad. Forked from **Riley Brown’s [Bluey](https://github.com/rbrown101010/bluey-by-riley)**. The original Unlicense in `LICENSE` is retained. Bluey's conservative nudge policy and encrypted paired-device transport are adapted here; the new interface and icon belong to Vigil.
+A calm native focus companion for Mac, iPhone and iPad. Forked from **Riley Brown’s [Bluey](https://github.com/rbrown101010/bluey-by-riley)**. The original Unlicense in `LICENSE` is retained. Bluey's original FaceView, FaceAnimator, BlobShape, cursor renderer, motion engine, pentatonic chirp and focus timeline/check-detail views are restored directly from upstream. Vigil adds a desktop face and keeps its parking lot, calendar, history and free-model layer.
 
 ## Start
-Open Vigil on the Mac and phone or iPad on the same Wi-Fi. Choose Pair on the Mac, then scan that QR in the companion. Paste an OpenRouter key into Mac Settings, or try the named Tuck import. Permission is requested when a feature is used: screen checks, on-device microphone/speech, camera pairing, and read-only calendar.
+Open Vigil on the Mac and phone or iPad on the same Wi-Fi. Choose Pair on the Mac, then scan that QR in the companion. Paste an OpenRouter key into Mac Settings, or try the named Tuck import. Test connection makes one synthetic, zero-price test per configured provider and reports the model and result. The OpenCode free tier may require its official client or report that its free allowance is exhausted; Vigil never enables paid usage to make a test pass. Permission is requested when a feature is used: screen checks, on-device microphone/speech, camera pairing, and read-only calendar.
 
 Hold the blueberry and say “focus on …” to start a session; “park this: …” saves an idea. Type and buttons work too. The Mac owns the timer. The companions show its state and keep the last daily summary for offline viewing. Only session records, settings and parked ideas cross the encrypted local link; API keys, screenshots, OCR and audio do not.
+
+## The character
+The phone opens on the original landscape face: live mouse gaze, spring motion, blinking, idle sleepiness, expressions, hold-to-talk, nudge bubbles/chirps, countdown and timeline. Prop it sideways below the monitor. Face controls open the existing focus, parking lot, calendar and settings window. Timeline and category taps inspect the original probability/confidence detail views.
+
+The Mac remains a menu bar app. Its small borderless floating face shares the phone renderer and expression stream and tracks the whole desktop. Settings offers size and visibility; hold Option and drag to move it. Ordinary clicks pass through. The original teardrop buddy flies on nudges with the upstream comet/string trail and bubble. Verified foreground-window targets are rechecked locally; other messages point at Vigil itself. No automatic input occurs.
+
+The full-bleed app icon is generated on the cloud macOS runner using the actual FaceView.draw code, not a different mascot. Riley's palette, crown/star, shine, blush and shapes remain the base.
 
 ## Privacy and models
 All on-screen window owners and titles are checked before capture, after capture and before a send. Unreadable normal-window metadata fails closed and skips the check. QuickTime Player, Teams, Outlook, Remote Desktop/Windows App, Chrome Remote Desktop and any QualityAI window skip the whole observation as `private (skipped)`. Screenshots and OCR are never saved. The app does not record meetings, control other apps or play speech.
@@ -19,6 +26,6 @@ The phone also parks ideas offline, retaining their original time and stable ide
 ## Build and verification
 The project spec is `project.yml` (XcodeGen), with `Vigil` universal iOS and `VigilMac` native macOS schemes. Both compile shared Swift directly; no bundled third-party frameworks. Apple team V892V3PC6T, bundle IDs `com.kafworlddigital.vigil.ios` and `.mac`.
 
-`swift test --jobs 2` runs parser, mocked routing/quotas, privacy, parking, timing and summary tests. The manual GitHub workflow builds Release, runs `simctl install` + `simctl launch` on both iPhone and iPad simulators, proves each process survives 15 seconds, saves simulator screenshots, and checks `otool -L` recursively for embedded @rpath dependencies. Device installation requires those proofs for the same source commit. Simulator screenshots are not physical-device acceptance.
+`swift test --jobs 2` runs parser, mocked routing/quotas, privacy, parking, timing and summary tests. The manual GitHub workflow builds Release, runs `simctl install` + `simctl launch` on both iPhone and iPad simulators, proves each process survives 15 seconds, saves simulator screenshots, and checks `otool -L` recursively for embedded @rpath dependencies. The cloud runner also launches Mac Release for 15 seconds and checks two explicitly labelled renderer-fixture gaze directions and one-second animation frames. GitHub's virtual hardware cursor cannot move, so these are not desktop cursor proof. Before any physical installation, the signed staged app must separately pass actual scripted cursor movement on the real Mac, a no-fixture gaze assertion, one-second animation checks, and human visual review of its own live rendered views. No other app or whole desktop is captured. Device installation requires these checks and the successful exact-source cloud run. Simulator and renderer-fixture images are not physical-device acceptance.
 
 See `docs/DELIVERY.md` for this build's actual delivery status. No schedules or collectors are created.

@@ -76,7 +76,7 @@ targets:
       properties:
         CFBundleDisplayName: Vigil
         CFBundleIconFile: AppIcon.icns
-        LSUIElement: true
+        LSUIElement: false
         NSPrincipalClass: NSApplication
         NSMicrophoneUsageDescription: Hold to talk to start a focus session or park
           an idea.
@@ -152,7 +152,7 @@ targets:
       properties:
         CFBundleDisplayName: Vigil
         CFBundleIconFile: AppIcon.icns
-        LSUIElement: true
+        LSUIElement: false
         NSPrincipalClass: NSApplication
         NSMicrophoneUsageDescription: Hold to talk to start a focus session or park
           an idea.

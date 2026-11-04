@@ -17,7 +17,7 @@ final class Settings {
 }
 final class VigilDelegate:NSObject,NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification:Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.regular)
         let args=ProcessInfo.processInfo.arguments
         if let i=args.firstIndex(of:"--vigil-test-connections"),i+1<args.count {
             Task{@MainActor in

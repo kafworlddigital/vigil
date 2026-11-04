@@ -140,6 +140,14 @@ enum VigilEdition {
         let text=reply?.text ?? "One small step. Ready to return to your task?"
         return !text.isEmpty && text.count<=240 ? text:"One small step. Ready to return to your task?"
     }
+    func postNotification(_ text:String) {
+        let args=ProcessInfo.processInfo.arguments
+        guard notifications,!args.contains("--vigil-proof"),!args.contains("--vigil-screen") else{return}
+        let content=UNMutableNotificationContent();content.title="Vigil";content.body=String(text.prefix(240))
+        // Visible reminders respect the preference and OS permission; preview/test modes stay silent.
+        let request=UNNotificationRequest(identifier:"vigil-"+UUID().uuidString,content:content,trigger:nil)
+        UNUserNotificationCenter.current().add(request){_ in}
+    }
     func setNotifications(_ enabled:Bool) {
         notifications=enabled;UserDefaults.standard.set(enabled,forKey:"vigil.notifications")
         if enabled {UNUserNotificationCenter.current().requestAuthorization(options:[.alert,.sound]){_,_ in}}

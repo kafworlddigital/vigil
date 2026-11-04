@@ -201,7 +201,7 @@ enum VigilPointing {
         }
     }
     func testNudge() { notify("A little nudge from Vigil. Ready for your next step?") }
-    private func notify(_ text:String,target:CGPoint?=nil) { VigilCharacterHost.shared.nudge(text,target:target);onBroadcast?(Packet(command:"nudge",text:text)) }
+    private func notify(_ text:String,target:CGPoint?=nil) { VigilAI.shared.postNotification(text);VigilCharacterHost.shared.nudge(text,target:target);onBroadcast?(Packet(command:"nudge",text:text)) }
     private func encodedState()->String? { (try? JSONEncoder().encode(state)).flatMap{String(data:$0,encoding:.utf8)} }
     private func cancelWork() { generation=UUID();task?.cancel();task=nil }
     private func findMeeting() {

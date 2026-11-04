@@ -1,5 +1,5 @@
 import Foundation
-struct ConnectionResult:Identifiable {
+struct ConnectionResult:Identifiable,Codable {
     var id:String { provider }
     var provider:String
     var model:String
@@ -19,14 +19,14 @@ enum ConnectionTester {
                 if provider == "OpenRouter" {
                     let client=OpenRouterClient()
                     let models=try await client.models(vision:true,allowPaid:false)
-                    guard let selected=models.first(where:{$0.id.contains("gemma-4-26b")}) ?? models.first else{throw RouterError.unavailable}
+                    guard let selected=models.first(where:{$0.id.contains("dots-3-note-preview")}) ?? models.first else{throw RouterError.unavailable}
                     model=selected.id;endpoint="https://openrouter.ai/api/v1/chat/completions"
                     // Synthetic image only. Never capture a desktop for a connection test.
-                    let png="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII="
-                    body=["model":model,"messages":[["role":"user","content":[["type":"text","text":"Reply OK if you received this test image."],["type":"image_url","image_url":["url":"data:image/png;base64,"+png]]]]],"max_tokens":192,"reasoning":["enabled":false],"provider":["max_price":["prompt":0,"completion":0,"request":0,"image":0]]]
+                    let png="iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAADGklEQVR4nO3OQQ0AMBAEofVvupUxjyNBANseHNYPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPINQPIPMBO2oO8jAVKJAAAAAASUVORK5CYII="
+                    body=["model":model,"messages":[["role":"user","content":[["type":"text","text":"Reply OK if you received this test image."],["type":"image_url","image_url":["url":"data:image/png;base64,"+png]]]]],"max_tokens":512,"reasoning":["enabled":false],"provider":["max_price":["prompt":0,"completion":0,"request":0,"image":0]]]
                 }else{
                     model="mimo-v2.6-flash-free";endpoint="https://opencode.ai/inference/openai/v1/chat/completions"
-                    body=["model":model,"messages":[["role":"user","content":"Reply OK."]],"max_tokens":192]
+                    body=["model":model,"messages":[["role":"user","content":"Reply OK."]],"max_tokens":512]
                 }
                 var request=URLRequest(url:URL(string:endpoint)!);request.httpMethod="POST";request.timeoutInterval=35
                 request.setValue("Vigil/1.0",forHTTPHeaderField:"User-Agent")

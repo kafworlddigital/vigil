@@ -18,6 +18,13 @@ final class Settings {
 final class VigilDelegate:NSObject,NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification:Notification) {
         NSApp.setActivationPolicy(.accessory)
+        let args=ProcessInfo.processInfo.arguments
+        if let i=args.firstIndex(of:"--vigil-test-connections"),i+1<args.count {
+            Task{@MainActor in
+                let results=await ConnectionTester.run()
+                if let data=try? JSONEncoder().encode(results){try? data.write(to:URL(fileURLWithPath:args[i+1]),options:.atomic)}
+            }
+        }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender:NSApplication)->Bool { false }
 }

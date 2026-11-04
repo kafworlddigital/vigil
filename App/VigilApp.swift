@@ -25,6 +25,7 @@ import CoreImage.CIFilterBuiltins
             Button("Open focus, parking lot and calendar"){openWindow(id:"main")}
             Toggle("Show desktop face",isOn:Binding(get:{VigilCharacterHost.shared.visible},set:{VigilCharacterHost.shared.setVisible($0)}))
             Button("Move face (hold Option and drag)"){VigilCharacterHost.shared.showMoveHint()}
+            Menu("Expressions") {ForEach([Mood.happy,.surprised,.listening,.sleepy,.thinking],id:\.rawValue){mood in Button(mood.title){VigilCharacterHost.shared.setMood(mood)}};Button("Automatic expressions"){VigilCharacterHost.shared.releaseMood()}}
             Button("Test a nudge"){engine.testNudge()}
             SettingsLink()
             Divider();Button("Quit Vigil"){NSApplication.shared.terminate(nil)}

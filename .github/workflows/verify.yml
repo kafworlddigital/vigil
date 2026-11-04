@@ -16,6 +16,8 @@ jobs:
         run: |
           command -v xcodegen || brew install xcodegen
           xcodegen generate
+      - name: Render icon from original character
+        run: python3 scripts/render_icon.py
       - name: Unit tests
         run: swift test --jobs 2 2>&1 | tee unit-tests.log
       - name: Release simulator build

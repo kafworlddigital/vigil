@@ -22,6 +22,7 @@ struct PhoneFaceScreen:View {
                         Text(link.connected ? (link.fresh ? active?.detail ?? "Hold Vigil and describe a task" : "Waiting for your Mac…") : "Pair your Mac · keep both on the same Wi-Fi").font(.plexMono(10))
                     }.frame(maxWidth:380,alignment:.leading)
                     Spacer()
+                    Menu{ForEach([Mood.happy,.surprised,.listening,.sleepy,.thinking],id:\.rawValue){mood in Button(mood.title){link.face.localMood=mood;link.send("faceMood",text:mood.rawValue)}};Button("Automatic expressions"){link.face.localMood=nil;link.send("faceRelease")}}label:{Image(systemName:"face.smiling")}.accessibilityLabel("Expressions")
                     Button(action:pair){Image(systemName:"qrcode.viewfinder")}.accessibilityLabel("Pair Mac")
                     Button{dashboard=true}label:{Image(systemName:"gearshape")}.accessibilityLabel("Focus, parking lot, calendar and Settings")
                 }
@@ -38,7 +39,10 @@ struct PhoneFaceScreen:View {
                     Button{dashboard=true}label:{Image(systemName:"scope")}.accessibilityLabel("Focus sessions")
                     Image(systemName:speech.listening ? "mic.fill":"mic").accessibilityLabel("Hold Vigil to talk")
                     Spacer()
-                    Text(FocusSession.clock(active?.remaining ?? 1800)).font(.system(size:70,weight:.semibold,design:.rounded)).monospacedDigit().minimumScaleFactor(0.6)
+                    TimelineView(.periodic(from:.now,by:1)){timeline in
+                        let remaining=active.map{max(0,$0.remaining-($0.status == .running && link.fresh ? max(0,min(6,timeline.date.timeIntervalSince(link.state.sentAt))):0))} ?? 1800
+                        Text(FocusSession.clock(remaining)).font(.system(size:70,weight:.semibold,design:.rounded)).monospacedDigit().minimumScaleFactor(0.6)
+                    }
                 }
             }.padding(.horizontal,24).padding(.vertical,16).foregroundStyle(.white).buttonStyle(.plain)
         }.background(.black).persistentSystemOverlays(.hidden)
@@ -83,7 +87,7 @@ struct VigilHistoryView:View {
     @Environment(\.dismiss) private var dismiss
     var body:some View {VStack(alignment:.leading){HStack{Text("Focus history").font(.title2);Spacer();Button("Done"){dismiss()}}
         List(sessions.reversed()){session in VStack(alignment:.leading,spacing:8){Text(session.task).font(.headline);FocusTimelineStrip(session:session).frame(height:12)
-            ForEach(Array(session.checks.enumerated()),id:\.offset){_,c in HStack{Text(FocusSession.clock(c.elapsed));Text(c.activity.rawValue);Spacer();Text(String(format:"%.0f%% off-task estimate",c.probability*100))}.font(.caption)}
+            ForEach(Array(session.checks.enumerated()),id:\.offset){_,c in HStack{Text(FocusSession.clock(c.elapsed));Text(c.activity.rawValue);Spacer();if let probability=c.estimate(for:.offTask){Text(String(format:"%.0f%% off-task estimate",probability*100))}else{Text("No valid estimate")}}.font(.caption)}
         }}
     }.padding(24).frame(minWidth:300,minHeight:300)}
 }

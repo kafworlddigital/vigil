@@ -60,7 +60,7 @@ public struct RouterModel: Codable, Equatable, Sendable {
         }.sorted { a,b in
             if a.free != b.free { return a.free }
             func rank(_ m:RouterModel)->Int {
-                if m.id.contains("gemma-4-26b") { return 0 }
+                if m.id.contains("dots-3-note-preview") { return 0 }
                 if m.id.contains("nemotron-3.5-super-vl") { return 1 }
                 if m.id.contains("nemotron-3.5-lightning") { return 2 }
                 return 3
@@ -171,7 +171,7 @@ public actor OpenRouterClient {
         req.setValue("Bearer \(key)",forHTTPHeaderField:"Authorization")
         req.setValue("application/json",forHTTPHeaderField:"Content-Type")
         let price:[String:Double] = model.free ? ["prompt":0,"completion":0,"request":0,"image":0] : ["prompt":0.2,"completion":0.8,"request":0,"image":0]
-        req.httpBody=try JSONSerialization.data(withJSONObject:["model":model.id,"messages":messages,"max_tokens":220,"reasoning":["enabled":false],"provider":["max_price":price],"usage":["include":true]])
+        req.httpBody=try JSONSerialization.data(withJSONObject:["model":model.id,"messages":messages,"max_tokens":512,"reasoning":["enabled":false],"provider":["max_price":price],"usage":["include":true]])
         guard await permitsSend() else { throw RouterError.privateScreen }
         try Task.checkCancellation()
         usage.requests += 1; usage.lastModel = model.id; saveUsage()
@@ -185,7 +185,7 @@ public actor OpenRouterClient {
         let object=try JSONSerialization.jsonObject(with:data) as? [String:Any]
         let detail=object?["usage"] as? [String:Any]
         if let cost=detail?["cost"] as? Double,cost.isFinite,cost>=0 { usage.cost += cost }
-        else if !model.free { usage.cost += model.promptPrice*13000+model.completionPrice*220 }
+        else if !model.free { usage.cost += model.promptPrice*13000+model.completionPrice*512 }
         saveUsage()
         return try Self.content(data)
     }

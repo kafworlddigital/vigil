@@ -20,8 +20,12 @@ def screenshot(udid,path):
 for family in ['iPhone','iPad']:
  device=next((d for d in flat if family in d['name']),None)
  if not device:raise SystemExit('No available '+family+' simulator')
- # A new device avoids stale image migrations and prior simulator state.
- udid=subprocess.check_output(['xcrun','simctl','create','Vigil-'+family,device['deviceTypeIdentifier'],device['runtime']],text=True,timeout=60).strip()
+ # Keith gets a fresh simulator. Macy installs a separate bundle into that already-proven OS.
+ prior=pathlib.Path('proofs')/(family+'-launch.json')
+ if prefix and prior.exists():
+  udid=json.loads(prior.read_text())['udid']
+ else:
+  udid=subprocess.check_output(['xcrun','simctl','create','Vigil-'+family,device['deviceTypeIdentifier'],device['runtime']],text=True,timeout=60).strip()
  device=dict(device,udid=udid,state='Shutdown')
  if device['state']!='Booted':subprocess.run(['xcrun','simctl','boot',udid],check=True)
  subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True,timeout=600)
@@ -52,11 +56,10 @@ for family in ['iPhone','iPad']:
  pathlib.Path(f'proofs/{prefix}{family}-launch.json').write_text(json.dumps({'family':family,'simulator':device['name'],'udid':udid,'bundle':bundle,'pid':pid,'survivedSeconds':15,'process':matching,'configuration':'Release'},indent=2))
  # Capture actual production intro and Settings views in this fresh simulator.
  for screen in ['intro','settings','help']:
-  subprocess.run(['xcrun','simctl','terminate',udid,bundle],check=True,timeout=30)
-  subprocess.run(['xcrun','simctl','launch',udid,bundle,'--vigil-screen',screen,'--vigil-skip-intro'],check=True,timeout=120)
+  subprocess.run(['xcrun','simctl','launch','--terminate-running-process',udid,bundle,'--vigil-screen',screen,'--vigil-skip-intro'],check=True,timeout=120)
   time.sleep(15 if screen=='settings' else 3)
   screenshot(udid,f'proofs/{prefix}{family}-{screen}.png')
- subprocess.run(['xcrun','simctl','terminate',udid,bundle],check=True,timeout=30)
+ subprocess.run(['xcrun','simctl','terminate',udid,bundle],check=True,timeout=120)
  time.sleep(2)
  screenshot(udid,f'proofs/{prefix}{family}-home-icon.png')
  print(f'{family}: Release installed, launched and stayed up 15 seconds')

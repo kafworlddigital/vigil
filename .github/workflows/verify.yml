@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   verify:
-    runs-on: macos-26
+    runs-on: macos-26-intel
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +30,8 @@ jobs:
         run: xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/simulator -jobs 2 CODE_SIGNING_ALLOWED=NO build > simulator-build.log 2>&1
       - name: Mac release build
         run: xcodebuild -project Vigil.xcodeproj -scheme VigilMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build/mac -jobs 2 CODE_SIGNING_ALLOWED=NO build > mac-build.log 2>&1
+      - name: Verify Apple silicon remains in the Mac build
+        run: lipo -verify_arch arm64 build/mac/Build/Products/Release/Vigil.app/Contents/MacOS/Vigil
       - name: Mac launch and live character proofs
         run: |
           codesign --force --deep --sign - build/mac/Build/Products/Release/Vigil.app

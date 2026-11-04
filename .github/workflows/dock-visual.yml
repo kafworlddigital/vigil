@@ -26,10 +26,10 @@ jobs:
           gh run view "$SOURCE_RUN" --json status,conclusion,headSha > source.json
           python3 -c 'import json,os; d=json.load(open("source.json")); assert d=={"status":"completed","conclusion":"success","headSha":os.environ["SOURCE_SHA"]}'
           gh run download "$SOURCE_RUN" --name Vigil-release-evidence --dir source-evidence
-          mkdir app
-          ditto -x -k source-evidence/delivery/Vigil-Mac.zip app
+          mkdir -p dock-stage
+          ditto -x -k source-evidence/delivery/Vigil-Mac.zip dock-stage
       - name: Capture the actual Dock icon on the cloud Mac
-        run: python3 scripts/capture_cloud_dock.py app/Vigil.app
+        run: python3 scripts/capture_cloud_dock.py dock-stage/Vigil.app
       - uses: actions/upload-artifact@v4
         if: always()
         with:

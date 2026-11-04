@@ -99,6 +99,17 @@ final class VigilTests:XCTestCase {
             XCTAssertEqual(prices["prompt"],0);XCTAssertEqual(prices["completion"],0)
         }
     }
+    func testPaidFallbackRequiresExplicitOptInAndStaysCheap() async throws {
+        let mock=MockTransport(replies:[(200,Self.catalog),(503,Data()),(503,Data()),(200,Self.answer(#"{"choice":"on_task","p_on":1,"p_off":0,"p_uncertain":0}"#))])
+        let client=OpenRouterClient(transport:mock)
+        let result=try await client.classify(jpeg:Data(),ocr:"synthetic",app:"Test",task:"synthetic",key:"synthetic",allowPaid:true)
+        XCTAssertEqual(result.activity,.onTask)
+        let requests=await mock.requests
+        let body=try JSONSerialization.jsonObject(with:requests.last!.httpBody!) as! [String:Any]
+        XCTAssertEqual(body["model"] as? String,"paid/c")
+        let provider=body["provider"] as! [String:Any],price=provider["max_price"] as! [String:Double]
+        XCTAssertEqual(price["prompt"],0.2);XCTAssertEqual(price["completion"],0.8)
+    }
     func testMalformedDoesNotTriggerExtraRequests() async throws {
         let mock=MockTransport(replies:[(200,Self.catalog),(200,Self.answer("bad json"))])
         let client=OpenRouterClient(transport:mock)

@@ -1,9 +1,16 @@
-# Vigil delivery record
+# Vigil 1.0 · build 2 verification
 
-4 November 2026. Authorised native Mac + iPhone + iPad build. Public fork confirmed before committing source; no employer records, real calendar data, API keys or private screenshots belong here.
+Application source: `5f23cfdab1054537ecb48e41ae5398395418b77a`.
 
-The requested external path `/Volumes/5TB_WD_Ext/Builds/Vigil` failed at mkdir with `Invalid argument`. No local clone or build was substituted. Source is in `/srv/projects/vigil` on the verified Contabo server; an untouched original-source backup is retained outside the repository. Xcode Cloud API readback found no Vigil product or connected repository. A standard public GitHub-hosted macOS runner is the verified free build route. Free OpenCode CLI UI task produced no output and was stopped; no claim of working delegation.
+[Successful hosted verification](https://github.com/kafworlddigital/vigil/actions/runs/41767559387) completed on 4 November 2026:
 
-Tuck is installed as `com.kafworlddigital.tuck.mac`; its sandbox Application Support folder returned Operation not permitted. Vigil tries the exact named keychain item without prompting and provides a secure paste field. Actual key availability, signed Mac launch, phone pairing and physical-device acceptance still require readback.
+- 18 unit tests passed, zero failures: strict classification parsing, free/explicit-cheap routing with mocked HTTP, quota/cooldown, weekly catalogue refresh, any-visible-window privacy including unreadable metadata, idempotent parking and failure preservation, nudge/break/meeting timing, daily summary, encrypted authenticated loopback, tamper and replay rejection.
+- Both iPhone and iPad Release apps were installed with `xcrun simctl install`, launched with `xcrun simctl launch`, and independently found running after 15 seconds. Simulator screenshots and launch receipts were saved by the workflow.
+- Native macOS and universal iOS device Release builds succeeded. Recursive `otool -L` inspection found no missing embedded `@rpath` dependencies. Shared Swift compiles directly into each target, with system frameworks only.
+- All compilation and simulator work ran on hosted macOS. No local Mac build, clone, DerivedData or build archive was used. The code workspace is on the existing owner-controlled cloud server.
 
-Release simulator and physical installation status: pending checks. No device installation is authorised to skip the two Release launch proofs.
+Build 2 additionally cancels microphone use on cancelled holds and inactive scenes, and creates the audio engine only for an intentional hold. Original Bluey licensing and attribution are retained. No other application bundle is replaced by the new identifiers.
+
+The screenshots above are simulator evidence. Physical-device installation and UI receipts remain private; they are separate from simulator launch proof. Pairing, on-device speech, calendar permission and authenticated screen classification require owner first-use setup and their own runtime acceptance. The network tests use synthetic data and mocked responses. No real work screenshot, calendar contents, API key or device pairing credential is included in the repository or hosted test inputs.
+
+Vigil supports a named Tuck Keychain import and a secure manual paste field. Provider availability, free quota and current model pricing are checked at runtime; a catalogue entry is not proof of a successful authenticated model request. Paid fallback is off by default. No App Store or TestFlight release is performed by this workflow.

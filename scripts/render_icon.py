@@ -13,8 +13,8 @@ sources.append(r'''
         guard let rgb=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:bitmap.pixelsWide,pixelsHigh:bitmap.pixelsHigh,bitsPerSample:8,samplesPerPixel:3,hasAlpha:false,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0) else {fatalError("RGB conversion failed")}
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current=NSGraphicsContext(bitmapImageRep:rgb)
-        NSColor.black.setFill();NSRect(x:0,y:0,width:rgb.pixelsWide,height:rgb.pixelsHigh).fill()
-        image.draw(in:NSRect(x:0,y:0,width:rgb.pixelsWide,height:rgb.pixelsHigh),from:.zero,operation:.sourceOver,fraction:1)
+        NSColor.black.setFill();NSRect(x:0,y:0,width:CGFloat(rgb.pixelsWide),height:CGFloat(rgb.pixelsHigh)).fill()
+        image.draw(in:NSRect(x:0,y:0,width:CGFloat(rgb.pixelsWide),height:CGFloat(rgb.pixelsHigh)),from:.zero,operation:.sourceOver,fraction:1)
         NSGraphicsContext.restoreGraphicsState();bitmap=rgb
     }
     guard let data=bitmap.representation(using:.png,properties:[:]) else {fatalError("PNG conversion failed")}

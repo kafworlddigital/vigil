@@ -5,7 +5,7 @@ struct VigilHelpView:View {
     private let topics:[(String,String)]=[
         ("Focus sessions","Choose one task and a time, then press Start focus. Pause for a break or Finish when you're done. Your history shows the checks and ideas from each session."),
         ("The face","The Mac face follows your pointer. Hold Option and drag to move it; change its size in Settings. On a paired phone, the face keeps you company beside your screen. Prop the phone sideways below the monitor."),
-        ("Pairing","On the Mac choose Pair. On your phone tap Pair, then Scan Mac code and point the camera at the QR code. Keep both on the same Wi-Fi. Each edition has its own private pairing."),
+        ("Pairing","On the Mac choose Pair. On your phone tap Pair and point the camera at the QR code. Keep both on the same Wi-Fi. Each edition has its own private pairing."),
         ("Hold to talk","Hold the face, say your task and release. Say ‘park this’ before an idea to save it for later. Speech recognition runs on your device. You can always type instead."),
         ("Nudges","During a focus session, repeated clear signs of drift can bring a kind reminder. Ambiguous or protected screens do not count as drift. Test a nudge from the Mac menu."),
         ("The parking lot","Type an idea and press Park, or say ‘park this’ followed by the idea. Open Parking lot to revisit it. Parking an idea leaves your current task in place."),

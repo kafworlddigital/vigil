@@ -241,7 +241,7 @@ struct PhoneRoot:View {
 struct PhonePairView:View {
     @ObservedObject var link:PhoneDeviceLink
     @State private var code=""
-    @State private var scan=false
+    @State private var scan=true
     @Environment(\.dismiss) private var dismiss
     var body:some View{VStack(alignment:.leading,spacing:20){HStack{Text("Pair your Mac").font(.title2);Spacer();Button("Done"){dismiss()}};Text("On your Mac, open Vigil and choose Pair. Scan its code here, on the same Wi-Fi.").foregroundStyle(.secondary)
         if scan{VigilQRScanner{if link.pair($0){dismiss()}}.frame(height:300).clipShape(RoundedRectangle(cornerRadius:16))}else{Button("Scan Mac code"){scan=true}.buttonStyle(.borderedProminent)}

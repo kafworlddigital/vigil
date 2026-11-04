@@ -18,6 +18,10 @@ jobs:
           xcodegen generate
       - name: Render icon v2 from native character
         run: python3 scripts/render_icon.py
+      - name: Verify public brain without Tailscale
+        run: |
+          curl --fail --silent --show-error --max-time 25 https://hermes-ovh.tail33f19f.ts.net:8443/vigil/ready -o brain-public.json
+          python3 -c 'import json; d=json.load(open("brain-public.json")); assert d.get("service")=="Vigil" and d.get("ready") is True; print("HTTPS brain answered from a GitHub runner without Tailscale")'
       - name: Verify approved icon
         run: python3 scripts/check_icon.py
       - name: Unit tests
@@ -75,6 +79,7 @@ jobs:
             proofs/
             *-build.log
             unit-tests.log
+            brain-public.json
             Resources/Vigil icon.png
             Resources/AppIcon.icns
             Resources/Assets.xcassets/AppIcon.appiconset/

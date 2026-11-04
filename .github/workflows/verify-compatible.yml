@@ -1,0 +1,90 @@
+name: Vigil compatible release checks
+on:
+  workflow_dispatch:
+defaults:
+  run:
+    shell: bash
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-15-intel
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      VIGIL_SIM_RUNTIME: iOS-18-5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate native project
+        run: |
+          command -v xcodegen || brew install xcodegen
+          xcodegen generate
+      - name: Render icon v2 from native character
+        run: python3 scripts/render_icon.py
+      - name: Verify public brain without Tailscale
+        run: |
+          curl --fail --silent --show-error --max-time 25 https://hermes-ovh.tail33f19f.ts.net:8443/vigil/ready -o brain-public.json
+          python3 -c 'import json; d=json.load(open("brain-public.json")); assert d.get("service")=="Vigil" and d.get("ready") is True; print("HTTPS brain answered from a GitHub runner without Tailscale")'
+      - name: Verify approved icon
+        run: python3 scripts/check_icon.py
+      - name: Unit tests
+        run: swift test --jobs 2 2>&1 | tee unit-tests.log
+      - name: Release simulator build
+        run: xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/simulator -jobs 2 CODE_SIGNING_ALLOWED=NO build > simulator-build.log 2>&1
+      - name: Mac release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme VigilMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build/mac -jobs 2 CODE_SIGNING_ALLOWED=NO build > mac-build.log 2>&1
+      - name: Verify Apple silicon remains in the Mac build
+        run: lipo build/mac/Build/Products/Release/Vigil.app/Contents/MacOS/Vigil -verify_arch arm64
+      - name: Mac launch and live character proofs
+        run: |
+          codesign --force --deep --sign - build/mac/Build/Products/Release/Vigil.app
+          open -g build/mac/Build/Products/Release/Vigil.app --args --vigil-proof "$PWD/proofs" --vigil-renderer-fixture --vigil-skip-intro
+          sleep 15
+          pgrep -f '/Vigil.app/Contents/MacOS/Vigil'
+          python3 scripts/check_character_proofs.py proofs --allow-renderer-fixture
+          pkill -x Vigil || true
+      - name: Device release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device -jobs 2 CODE_SIGNING_ALLOWED=NO build > device-build.log 2>&1
+      - name: Inspect embedded frameworks
+        run: |
+          python3 scripts/check_frameworks.py build/mac/Build/Products/Release/Vigil.app
+          python3 scripts/check_frameworks.py build/device/Build/Products/Release-iphoneos/Vigil.app
+      - name: iPhone and iPad Release launch proofs
+        run: python3 scripts/prove_release.py build/simulator/Build/Products/Release-iphonesimulator/Vigil.app
+      - name: Macy iOS simulator Release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme VigilMacy -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/macy-simulator -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-simulator-build.log 2>&1
+      - name: Macy iOS device Release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme VigilMacy -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/macy-device -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-device-build.log 2>&1
+      - name: Macy Mac Release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme VigilMacyMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build/macy-mac -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-mac-build.log 2>&1
+      - name: Macy framework and runtime gates
+        run: |
+          python3 scripts/check_frameworks.py build/macy-device/Build/Products/Release-iphoneos/Vigil.app
+          python3 scripts/check_frameworks.py build/macy-mac/Build/Products/Release/Vigil.app
+          codesign --force --deep --sign - build/macy-mac/Build/Products/Release/Vigil.app
+          open -g -n build/macy-mac/Build/Products/Release/Vigil.app --args --vigil-skip-intro
+          sleep 15
+          pgrep -f '/build/macy-mac/Build/Products/Release/Vigil.app/Contents/MacOS/Vigil'
+          pkill -x Vigil || true
+          python3 scripts/prove_release.py build/macy-simulator/Build/Products/Release-iphonesimulator/Vigil.app Macy
+      - name: Package installation files
+        run: |
+          mkdir -p delivery
+          ditto -c -k --sequesterRsrc --keepParent build/mac/Build/Products/Release/Vigil.app delivery/Vigil-Mac.zip
+          ditto -c -k --sequesterRsrc --keepParent build/device/Build/Products/Release-iphoneos/Vigil.app delivery/Vigil-iOS.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macy-mac/Build/Products/Release/Vigil.app delivery/Vigil-Macy-Mac.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macy-device/Build/Products/Release-iphoneos/Vigil.app delivery/Vigil-Macy-iOS.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Vigil-release-evidence
+          retention-days: 3
+          path: |
+            delivery/
+            proofs/
+            *-build.log
+            unit-tests.log
+            brain-public.json
+            Resources/Vigil icon.png
+            Resources/AppIcon.icns
+            Resources/Assets.xcassets/AppIcon.appiconset/

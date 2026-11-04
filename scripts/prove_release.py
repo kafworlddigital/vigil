@@ -1,10 +1,14 @@
-import subprocess,json,pathlib,sys,time,plistlib
+import subprocess,json,pathlib,sys,time,plistlib,os
 app=pathlib.Path(sys.argv[1]).resolve()
 prefix=(sys.argv[2]+'-') if len(sys.argv)>2 else ''
 subprocess.run(['python3','scripts/check_frameworks.py',str(app)],check=True)
 info=plistlib.loads((app/'Info.plist').read_bytes());bundle=info['CFBundleIdentifier']
 devices=json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','--json']))['devices']
 flat=[dict(d,runtime=runtime) for runtime in sorted(devices,reverse=True) for d in devices[runtime] if d.get('isAvailable')]
+requestedRuntime=os.environ.get('VIGIL_SIM_RUNTIME','')
+if requestedRuntime:
+ flat=[d for d in flat if requestedRuntime in d['runtime']]
+ assert flat, 'Requested compatibility simulator runtime is not installed'
 pathlib.Path('proofs').mkdir(exist_ok=True)
 def screenshot(udid,path):
  for attempt in range(2):

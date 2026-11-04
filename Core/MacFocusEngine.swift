@@ -58,6 +58,21 @@ struct VigilScreen {
         return VigilScreen(jpeg:jpeg,ocr:text,app:NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown")
     }
 }
+// Point at the freshly rechecked foreground window; never invent a model-selected UI target.
+enum VigilPointing {
+    @MainActor static func currentWindow()->CGPoint? {
+        guard (try? WorkScreenGuard.check()) != nil,let pid=NSWorkspace.shared.frontmostApplication?.processIdentifier,
+              let list=CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]] else{return nil}
+        let display=CGDisplayBounds(CGMainDisplayID())
+        for window in list where (window[kCGWindowOwnerPID as String] as? pid_t)==pid && (window[kCGWindowLayer as String] as? Int)==0 {
+            guard let raw=window[kCGWindowBounds as String] as? [String:Any],let rect=CGRect(dictionaryRepresentation:raw as CFDictionary),rect.width>120,rect.height>100 else{continue}
+            let target=CGPoint(x:rect.midX,y:rect.minY+40)
+            guard display.contains(target) else{return nil}
+            return CGPoint(x:target.x-display.minX,y:target.y-display.minY)
+        }
+        return nil
+    }
+}
 @MainActor final class MacFocusEngine:ObservableObject {
     @Published var state=VigilState()
     @Published var settings=VigilSettings()
@@ -186,7 +201,7 @@ struct VigilScreen {
         }
     }
     func testNudge() { notify("A little nudge from Vigil. Ready for your next step?") }
-    private func notify(_ text:String) { VigilCharacterHost.shared.nudge(text);onBroadcast?(Packet(command:"nudge",text:text)) }
+    private func notify(_ text:String,target:CGPoint?=nil) { VigilCharacterHost.shared.nudge(text,target:target);onBroadcast?(Packet(command:"nudge",text:text)) }
     private func encodedState()->String? { (try? JSONEncoder().encode(state)).flatMap{String(data:$0,encoding:.utf8)} }
     private func cancelWork() { generation=UUID();task?.cancel();task=nil }
     private func findMeeting() {
@@ -250,7 +265,7 @@ struct VigilScreen {
                         })
                     guard generation==token,!Task.isCancelled else { return }
                     try WorkScreenGuard.check()
-                    check.nudged=true;state.notice=message;notify(message)
+                    check.nudged=true;state.notice=message;notify(message,target:VigilPointing.currentWindow())
                 }
                 state.session?.checks.append(check);state.session?.detail=check.activity == .uncertain ? "Not enough context to judge" : check.activity == .onTask ? "On task" : "Checking gently before nudging"
                 let usage=await router.currentUsage();state.model=usage.lastModel;state.costUSD=usage.cost;state.requestsToday=usage.requests

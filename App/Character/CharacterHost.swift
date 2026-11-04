@@ -96,11 +96,12 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
     }
     func setMood(_ mood:Mood){Settings.shared.mood=mood;cursor.view.engine.brainMood=mood}
     func releaseMood(){cursor.view.engine.brainMood=nil;Settings.shared.mood = .listening}
-    func nudge(_ text:String){
+    func nudge(_ text:String,target:CGPoint?=nil){
         moodRelease?.cancel();setMood(.surprised)
         cursor.view.caption=text
         // With no verified OCR target, point at Vigil's own face, never invent a desktop target.
-        if let p=panel,let screen=NSScreen.screens.first {
+        if let target { cursor.mode = .pinned(target) }
+        else if let p=panel,let screen=NSScreen.screens.first {
             cursor.mode = .pinned(CGPoint(x:p.frame.midX-screen.frame.minX,y:screen.frame.maxY-p.frame.midY))
         }
         let release=DispatchWorkItem{[weak self] in self?.cursor.view.caption=nil;self?.cursor.goHome();self?.releaseMood()}

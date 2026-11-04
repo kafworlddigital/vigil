@@ -71,23 +71,12 @@ struct PhoneFaceScreen:View {
 import SwiftUI
 struct FocusTimelineStrip:View {
     let session:FocusSession
-    var body:some View {GeometryReader{geo in
-        ZStack(alignment:.leading){Rectangle().fill(.gray.opacity(0.4))
-            ForEach(Array(session.checks.enumerated()),id:\.offset){_,check in
-                let duration=max(1,session.elapsed)
-                Rectangle().fill(check.activity == .onTask ? Color.green:check.activity == .offTask ? Color(hex:0xFFC2A4):Color.gray)
-                    .frame(width:max(1,geo.size.width*min(check.sampleDuration ?? 60,duration)/duration))
-                    .offset(x:geo.size.width*min(check.elapsed,duration)/duration)
-            }
-        }.clipped()
-    }}
+    var body:some View {FocusTimeline(session:session)}
 }
 struct VigilHistoryView:View {
     var sessions:[FocusSession]
     @Environment(\.dismiss) private var dismiss
     var body:some View {VStack(alignment:.leading){HStack{Text("Focus history").font(.title2);Spacer();Button("Done"){dismiss()}}
-        List(sessions.reversed()){session in VStack(alignment:.leading,spacing:8){Text(session.task).font(.headline);FocusTimelineStrip(session:session).frame(height:12)
-            ForEach(Array(session.checks.enumerated()),id:\.offset){_,c in HStack{Text(FocusSession.clock(c.elapsed));Text(c.activity.rawValue);Spacer();if let probability=c.estimate(for:.offTask){Text(String(format:"%.0f%% off-task estimate",probability*100))}else{Text("No valid estimate")}}.font(.caption)}
-        }}
+        List(sessions.reversed()){session in FocusSummary(session:session)}
     }.padding(24).frame(minWidth:300,minHeight:300)}
 }

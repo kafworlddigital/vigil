@@ -157,6 +157,7 @@ struct VigilSettingsView:View {
     @State private var key=""
     @State private var goKey=""
     @State private var showHelp=false
+    @State private var showIntro=false
     @State private var feedback=""
     @State private var testing=false
     @State private var results:[ConnectionResult]=[]
@@ -171,7 +172,7 @@ struct VigilSettingsView:View {
             VStack(alignment:.leading,spacing:8){Text("Screen checks").font(.headline);Text("Every \(Int(value.safeInterval)) seconds");Slider(value:$value.interval,in:30...120,step:30).onChange(of:value.interval){_,_ in changed(value)};Text("Checks run only during a declared task. Free requests have a daily limit; the timer keeps running if they run out.").font(.caption).foregroundStyle(.secondary)}
             Button("Help"){showHelp=true}
             Link("Report a problem",destination:VigilSupport.reportURL)
-            Button("Show intro again"){dismiss();DispatchQueue.main.asyncAfter(deadline:.now()+0.3){NotificationCenter.default.post(name:Notification.Name("vigil.showIntro"),object:nil)}}
+            Button("Show intro again"){showIntro=true}
             ModelHealthView()
             Text("Your included Go plan, free models and on-device help. No OpenAI or GPT models.").font(.caption).foregroundStyle(.secondary)
             LabeledContent("Model in use",value:state.model)
@@ -196,7 +197,7 @@ struct VigilSettingsView:View {
             Divider();Text("Work privacy guard").font(.headline)
             ForEach(PrivacyGuard.displayList,id:\.self){Text($0).font(.callout)}
             Text("Any visible work window skips the whole check. It is recorded as private (skipped), never off-task.").font(.caption).foregroundStyle(.secondary)
-        }.padding(24).frame(maxWidth:600,alignment:.leading)}.frame(minWidth:300,minHeight:300).sheet(isPresented:$showHelp){VigilHelpView()}.onAppear{value=state.settings;feedback="On-device help is ready. Connect this device to use the server."}
+        }.padding(24).frame(maxWidth:600,alignment:.leading)}.frame(minWidth:300,minHeight:300).sheet(isPresented:$showHelp){VigilHelpView()}.sheet(isPresented:$showIntro){VigilIntroView{showIntro=false}.frame(idealWidth:520,idealHeight:440).interactiveDismissDisabled()}.onAppear{value=state.settings;feedback="On-device help is ready. Connect this device to use the server."}
     }
 }
 #if os(macOS)

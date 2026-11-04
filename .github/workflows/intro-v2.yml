@@ -5,7 +5,7 @@ on:
       runner:
         type: choice
         default: macos-26-intel
-        options: [macos-26-intel, macos-26, macos-15]
+        options: [macos-26-intel, macos-26, macos-15, macos-15-intel]
 defaults:
   run:
     shell: bash

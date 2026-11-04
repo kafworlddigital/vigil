@@ -12,7 +12,7 @@ struct VigilIntroView:View {
     @AppStorage(CompanionPreferences.nameKey) private var name="Vigil"
     @AppStorage(CompanionPreferences.colourKey) private var colour="blueberry"
     init(initialPage:Int=0,done:@escaping ()->Void){self.done=done;_page=State(initialValue:min(5,max(0,initialPage)))}
-    private var friend:String {CompanionPreferences().name}
+    private var friend:String {let v=name.trimmingCharacters(in:.whitespacesAndNewlines);return v.isEmpty ? "Vigil":String(v.prefix(24))}
     private var title:String {
         switch page {
         case 0:return "Meet \(friend)."
@@ -82,6 +82,7 @@ struct VigilIntroView:View {
 /// These cards use the production animated face and the cursor's original path and palette.
 struct IntroFeaturePicture:View {
     let page:Int
+    @State private var gaze:CGPoint?
     @AppStorage(CompanionPreferences.cornerKey) private var corner="bottomRight"
     @AppStorage(CompanionPreferences.colourKey) private var colour="blueberry"
     @AppStorage(CompanionPreferences.nudgeKey) private var nudge="gentle"
@@ -127,20 +128,27 @@ struct IntroFeaturePicture:View {
                     }.foregroundStyle(.white)
                     Spacer(minLength:0)
                 }
-                IntroLivingFace(mood:page==2 ? .pointing:.listening)
+                IntroLivingFace(mood:page==2 ? .pointing:.listening,gaze:gaze)
                     .frame(width:page==0 || page==5 ? min(220,width*0.56):120,height:page==0 || page==5 ? min(220,width*0.56)*390/844:56)
                     .frame(maxWidth:.infinity,maxHeight:.infinity,alignment:page==0 || page==5 ? (CompanionCorner(rawValue:corner) ?? .bottomRight).alignment:.bottomTrailing)
                     .padding(page==5 ? 8:14)
                 if page==2{
                     IntroCursorBuddy().frame(width:60,height:60).rotationEffect(.degrees(-12)).position(x:width*0.78,y:g.size.height*0.58)
                 }
-            }.clipShape(RoundedRectangle(cornerRadius:24)).overlay{RoundedRectangle(cornerRadius:24).strokeBorder(.white.opacity(0.10),lineWidth:1)}
+            }
+            .contentShape(Rectangle())
+            .onContinuousHover{phase in
+                switch phase {case .active(let p):gaze=CGPoint(x:(p.x-width/2)/max(1,width/2),y:(p.y-g.size.height/2)/max(1,g.size.height/2));case .ended:gaze=nil}
+            }
+            .simultaneousGesture(DragGesture(minimumDistance:0).onChanged{value in gaze=CGPoint(x:(value.location.x-width/2)/max(1,width/2),y:(value.location.y-g.size.height/2)/max(1,g.size.height/2))}.onEnded{_ in gaze=nil})
+            .clipShape(RoundedRectangle(cornerRadius:24)).overlay{RoundedRectangle(cornerRadius:24).strokeBorder(.white.opacity(0.10),lineWidth:1)}
         }.accessibilityLabel(page==2 ? "Vigil's cursor buddy pointing back to the task":"Vigil's animated face in the corner of a screen")
     }
 }
 
 struct IntroLivingFace:View {
     var mood:Mood = .listening
+    var gaze:CGPoint? = nil
     @State private var animator=FaceAnimator()
     var body:some View {
         GeometryReader{g in
@@ -150,7 +158,7 @@ struct IntroLivingFace:View {
                     switch phase {case .active(let point):look(point,g.size);case .ended:animator.touchGaze=nil}
                 }
                 .gesture(DragGesture(minimumDistance:0).onChanged{look($0.location,g.size)}.onEnded{_ in animator.touchGaze=nil})
-        }.onAppear{animator.localMood=mood;animator.awake=true}
+        }.onAppear{animator.localMood=mood;animator.awake=true}.onChange(of:gaze,initial:true){_,value in animator.touchGaze=value}
     }
     private func look(_ point:CGPoint,_ size:CGSize){animator.touchGaze=CGPoint(x:(point.x-size.width/2)/max(1,size.width/2),y:(point.y-size.height/2)/max(1,size.height/2))}
 }

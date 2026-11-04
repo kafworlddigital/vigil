@@ -10,7 +10,6 @@ struct PhoneFaceScreen:View {
     @State private var dashboard=false
     @State private var inspect=false
     @AppStorage(CompanionPreferences.cornerKey) private var corner="bottomRight"
-    @State private var lastTouch=CGPoint.zero
     @Environment(\.scenePhase) private var phase
     var body:some View {
         ZStack {

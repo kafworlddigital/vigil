@@ -9,9 +9,10 @@ dock=plistlib.loads(subprocess.check_output(['defaults','export','com.apple.dock
 if not any(x.get('tile-data',{}).get('file-data',{}).get('_CFURLString')==url for x in dock.get('persistent-apps',[])):
  subprocess.run(['defaults','write','com.apple.dock','persistent-apps','-array-add',xml],check=True)
 subprocess.run(['defaults','write','com.apple.dock','autohide','-bool','false'],check=True)
-subprocess.run(['killall','Dock'],capture_output=True)
-subprocess.run(['open','-g','/System/Library/CoreServices/Dock.app'],check=True)
-subprocess.run(['open','-g','-n',str(app),'--args','--vigil-screen','face','--vigil-skip-intro'],check=True)
+dockProcess=subprocess.run(['pgrep','-x','Dock'],capture_output=True)
+if dockProcess.returncode!=0:
+ subprocess.Popen(['/System/Library/CoreServices/Dock.app/Contents/MacOS/Dock'],stdout=(out/'Dock-process.log').open('w'),stderr=subprocess.STDOUT)
+subprocess.run(['open','-g','-n',str(app),'--args','--vigil-screen','face','--vigil-skip-intro'],check=False)
 time.sleep(10)
 cg=C.CDLL('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics');cf=C.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
 cg.CGWindowListCopyWindowInfo.argtypes=[C.c_uint32,C.c_uint32];cg.CGWindowListCopyWindowInfo.restype=C.c_void_p

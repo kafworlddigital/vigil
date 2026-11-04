@@ -1,0 +1,100 @@
+name: Vigil intro runtime gates using finished apps
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        type: string
+        default: '41880983309'
+      compile_sha:
+        type: string
+        default: f392e2a05812069592c19b4ae38c6eb3febd6106
+permissions:
+  contents: read
+  actions: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify completed compiles, tests and source equality
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_RUN: ${{ inputs.build_run }}
+          COMPILE_SHA: ${{ inputs.compile_sha }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" > compiled-run.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN/jobs" > compiled-jobs.json
+          python3 -c 'import json,os; r=json.load(open("compiled-run.json")); assert r["head_sha"]==os.environ["COMPILE_SHA"]; j=next(j for j in json.load(open("compiled-jobs.json"))["jobs"] if j["name"]=="build"); s={s["name"]:s["conclusion"] for s in j["steps"]}; assert s["Unit tests"]==s["Build both editions for all platforms"]==s["Preserve finished apps before simulator work"]=="success"'
+          git diff --exit-code "$COMPILE_SHA" HEAD -- App Core Config Shared Tests Resources project.yml Package.swift
+  runtime:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [Mac, iPhone, iPad]
+    runs-on: macos-26-intel
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-build
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: compiled
+      - name: Mac gates on the isolated cloud desktop
+        if: matrix.family == 'Mac'
+        run: |
+          set -euo pipefail
+          mkdir -p runtime/Keith runtime/Macy proofs
+          ditto -x -k compiled/delivery/Vigil-Mac.zip runtime/Keith
+          ditto -x -k compiled/delivery/Vigil-Macy-Mac.zip runtime/Macy
+          for edition in Keith Macy; do
+            app="$PWD/runtime/$edition/Vigil.app"
+            lipo "$app/Contents/MacOS/Vigil" -verify_arch arm64
+            python3 scripts/check_frameworks.py "$app"
+            codesign --force --deep --sign - "$app"
+            passed=false
+            for attempt in 1 2; do
+              proof="$PWD/proofs/$edition-attempt$attempt"
+              # Foreground is safe on the isolated cloud VM and keeps its compositor awake.
+              # Keith's real Mac is never activated or cursor-warped by this workflow.
+              open -n "$app" --args --vigil-proof "$proof" --vigil-renderer-fixture --vigil-skip-intro --vigil-intro-proof "$proof/intro-v2"
+              sleep 1
+              open "$app"
+              sleep 25
+              pgrep -f "$app/Contents/MacOS/Vigil"
+              if python3 scripts/check_character_proofs.py "$proof" --allow-renderer-fixture && python3 scripts/check_intro_images.py "$proof/intro-v2"; then passed=true; fi
+              pkill -x Vigil || true
+              if $passed; then break; fi
+            done
+            $passed
+          done
+          for item in Vigil-iOS.zip Vigil-Macy-iOS.zip; do
+            mkdir -p "runtime/$item"
+            ditto -x -k "compiled/delivery/$item" "runtime/$item"
+            python3 scripts/check_frameworks.py "runtime/$item/Vigil.app"
+          done
+      - name: Phone and tablet launch, face and every-card gates
+        if: matrix.family != 'Mac'
+        env:
+          VIGIL_SIM_FAMILY: ${{ matrix.family }}
+        run: |
+          set -euo pipefail
+          mkdir -p runtime/Keith runtime/Macy proofs
+          ditto -x -k compiled/simulator-input/Keith.zip runtime/Keith
+          ditto -x -k compiled/simulator-input/Macy.zip runtime/Macy
+          python3 scripts/prove_release.py runtime/Keith/Vigil.app
+          python3 scripts/prove_release.py runtime/Macy/Vigil.app Macy
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: intro-final-${{ matrix.family }}-proofs
+          path: proofs/
+          retention-days: 3

@@ -10,12 +10,13 @@ sources.append(r'''
     guard let image=renderer.nsImage,let tiff=image.tiffRepresentation,
           var bitmap=NSBitmapImageRep(data:tiff) else {fatalError("Icon render failed")}
     if opaque {
-        guard let rgb=NSBitmapImageRep(bitmapDataPlanes:nil,pixelsWide:bitmap.pixelsWide,pixelsHigh:bitmap.pixelsHigh,bitsPerSample:8,samplesPerPixel:3,hasAlpha:false,isPlanar:false,colorSpaceName:.deviceRGB,bytesPerRow:0,bitsPerPixel:0) else {fatalError("RGB conversion failed")}
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current=NSGraphicsContext(bitmapImageRep:rgb)
-        NSColor.black.setFill();NSRect(x:0,y:0,width:CGFloat(rgb.pixelsWide),height:CGFloat(rgb.pixelsHigh)).fill()
-        image.draw(in:NSRect(x:0,y:0,width:CGFloat(rgb.pixelsWide),height:CGFloat(rgb.pixelsHigh)),from:.zero,operation:.sourceOver,fraction:1)
-        NSGraphicsContext.restoreGraphicsState();bitmap=rgb
+        let width=bitmap.pixelsWide,height=bitmap.pixelsHigh
+        let rect=CGRect(x:0,y:0,width:CGFloat(width),height:CGFloat(height))
+        guard let source=image.cgImage(forProposedRect:nil,context:nil,hints:nil),
+              let rgb=CGContext(data:nil,width:width,height:height,bitsPerComponent:8,bytesPerRow:width*4,space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGImageAlphaInfo.noneSkipLast.rawValue) else {fatalError("RGB context failed")}
+        rgb.setFillColor(NSColor.black.cgColor);rgb.fill(rect);rgb.draw(source,in:rect)
+        guard let result=rgb.makeImage() else {fatalError("RGB conversion failed")}
+        bitmap=NSBitmapImageRep(cgImage:result)
     }
     guard let data=bitmap.representation(using:.png,properties:[:]) else {fatalError("PNG conversion failed")}
     try data.write(to:url)

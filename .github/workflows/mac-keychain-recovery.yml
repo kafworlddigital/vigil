@@ -1,11 +1,16 @@
 name: Vigil Mac Keychain recovery
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        type: choice
+        default: macos-15-intel
+        options: [macos-15-intel, macos-15, macos-26-intel]
 permissions:
   contents: read
 jobs:
   mac:
-    runs-on: macos-15-intel
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4

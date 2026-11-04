@@ -501,6 +501,10 @@ final class CursorView: NSView {
         for l in [stringLayer, trailLayer, effects, cursor, bubbles, speech] { root.addSublayer(l) }
 
         cursor.anchorPoint = CGPoint(x: 0, y: 1)  // the tip: top-left corner in y-up space
+        cursor.shadowColor = NSColor(hex: Palette.berry2).cgColor
+        cursor.shadowOpacity = 0.65
+        cursor.shadowRadius = 14
+        cursor.shadowOffset = .zero
         cursor.addSublayer(body)
         for _ in 0..<2 {
             let socket = CALayer()

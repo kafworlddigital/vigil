@@ -24,6 +24,13 @@ jobs:
         run: xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/simulator -jobs 2 CODE_SIGNING_ALLOWED=NO build > simulator-build.log 2>&1
       - name: Mac release build
         run: xcodebuild -project Vigil.xcodeproj -scheme VigilMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build/mac -jobs 2 CODE_SIGNING_ALLOWED=NO build > mac-build.log 2>&1
+      - name: Mac launch and live character proofs
+        run: |
+          codesign --force --deep --sign - build/mac/Build/Products/Release/Vigil.app
+          open -g build/mac/Build/Products/Release/Vigil.app --args --vigil-proof "$PWD/proofs"
+          sleep 15
+          pgrep -f '/Vigil.app/Contents/MacOS/Vigil'
+          python3 scripts/check_character_proofs.py proofs
       - name: Device release build
         run: xcodebuild -project Vigil.xcodeproj -scheme Vigil -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device -jobs 2 CODE_SIGNING_ALLOWED=NO build > device-build.log 2>&1
       - name: Inspect embedded frameworks
@@ -32,13 +39,6 @@ jobs:
           python3 scripts/check_frameworks.py build/device/Build/Products/Release-iphoneos/Vigil.app
       - name: iPhone and iPad Release launch proofs
         run: python3 scripts/prove_release.py build/simulator/Build/Products/Release-iphonesimulator/Vigil.app
-      - name: Mac launch and live character proofs
-        run: |
-          codesign --force --deep --sign - build/mac/Build/Products/Release/Vigil.app
-          open -g build/mac/Build/Products/Release/Vigil.app --args --vigil-proof "$PWD/proofs"
-          sleep 15
-          pgrep -f '/Vigil.app/Contents/MacOS/Vigil'
-          python3 scripts/check_character_proofs.py proofs
       - name: Package installation files
         run: |
           mkdir -p delivery

@@ -49,7 +49,6 @@ enum VigilEdition {
         loop=Task { [weak self] in
             if let i=args.firstIndex(of:"--vigil-activate"),i+1<args.count {await self?.activate(code:args[i+1])}
             while !Task.isCancelled {
-                await self?.enrolAutomatically()
                 await self?.testAll()
                 try? await Task.sleep(nanoseconds:1_800_000_000_000)
             }
@@ -61,6 +60,7 @@ enum VigilEdition {
     }
     func testAll() async {
         guard !testing,let router else{return};testing=true;defer{testing=false}
+        await enrolAutomatically()
         await router.setKeys(credentials())
         models=await router.snapshot()
         // The server probes models in parallel. Direct probes are only needed if it is unreachable.

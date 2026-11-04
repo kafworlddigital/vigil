@@ -49,6 +49,15 @@ jobs:
           xcodebuild -project Vigil.xcodeproj -scheme VigilMacy -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/macy-simulator -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-simulator-build.log 2>&1
           xcodebuild -project Vigil.xcodeproj -scheme VigilMacy -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/macy-device -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-device-build.log 2>&1
           xcodebuild -project Vigil.xcodeproj -scheme VigilMacyMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build/macy-mac -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-mac-build.log 2>&1
+      - name: Preserve finished apps before simulator work
+        run: |
+          mkdir -p delivery simulator-input
+          ditto -c -k --sequesterRsrc --keepParent build/mac/Build/Products/Release/Vigil.app delivery/Vigil-Mac.zip
+          ditto -c -k --sequesterRsrc --keepParent build/device/Build/Products/Release-iphoneos/Vigil.app delivery/Vigil-iOS.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macy-mac/Build/Products/Release/Vigil.app delivery/Vigil-Macy-Mac.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macy-device/Build/Products/Release-iphoneos/Vigil.app delivery/Vigil-Macy-iOS.zip
+          ditto -c -k --sequesterRsrc --keepParent build/simulator/Build/Products/Release-iphonesimulator/Vigil.app simulator-input/Keith.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macy-simulator/Build/Products/Release-iphonesimulator/Vigil.app simulator-input/Macy.zip
       - name: Framework and Mac launch gates
         run: |
           for app in build/mac/Build/Products/Release/Vigil.app build/macy-mac/Build/Products/Release/Vigil.app; do
@@ -67,15 +76,6 @@ jobs:
           for app in build/device/Build/Products/Release-iphoneos/Vigil.app build/macy-device/Build/Products/Release-iphoneos/Vigil.app; do
             python3 scripts/check_frameworks.py "$app"
           done
-      - name: Preserve finished apps before simulator work
-        run: |
-          mkdir -p delivery simulator-input
-          ditto -c -k --sequesterRsrc --keepParent build/mac/Build/Products/Release/Vigil.app delivery/Vigil-Mac.zip
-          ditto -c -k --sequesterRsrc --keepParent build/device/Build/Products/Release-iphoneos/Vigil.app delivery/Vigil-iOS.zip
-          ditto -c -k --sequesterRsrc --keepParent build/macy-mac/Build/Products/Release/Vigil.app delivery/Vigil-Macy-Mac.zip
-          ditto -c -k --sequesterRsrc --keepParent build/macy-device/Build/Products/Release-iphoneos/Vigil.app delivery/Vigil-Macy-iOS.zip
-          ditto -c -k --sequesterRsrc --keepParent build/simulator/Build/Products/Release-iphonesimulator/Vigil.app simulator-input/Keith.zip
-          ditto -c -k --sequesterRsrc --keepParent build/macy-simulator/Build/Products/Release-iphonesimulator/Vigil.app simulator-input/Macy.zip
       - uses: actions/upload-artifact@v4
         if: always()
         with:

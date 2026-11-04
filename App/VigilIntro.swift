@@ -67,7 +67,7 @@ struct VigilIntroView:View {
                         if page==5{done()}else{page+=1}
                     }.font(.body.weight(.semibold)).buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("intro.next")
                 }.padding(.horizontal,24).padding(.vertical,16)
-            }.background(.background).tint(Color(hex:Palette.gradient[2]))
+            }.background(.background).tint(Color(hex:Palette.gradient[3]))
         }.frame(minWidth:300,minHeight:280)
     }
     private var copyAndControls:some View {
@@ -131,7 +131,7 @@ struct IntroFeaturePicture:View {
                 IntroLivingFace(mood:page==2 ? .pointing:.listening,gaze:gaze)
                     .frame(width:page==0 || page==5 ? min(220,width*0.56):120,height:page==0 || page==5 ? min(220,width*0.56)*390/844:56)
                     .frame(maxWidth:.infinity,maxHeight:.infinity,alignment:page==0 || page==5 ? (CompanionCorner(rawValue:corner) ?? .bottomRight).alignment:.bottomTrailing)
-                    .padding(page==5 ? 8:14)
+                    .padding(.top,34).padding(.horizontal,14).padding(.bottom,page==5 ? 8:14)
                 if page==2{
                     IntroCursorBuddy().frame(width:60,height:60).rotationEffect(.degrees(-12)).position(x:width*0.78,y:g.size.height*0.58)
                 }
@@ -192,9 +192,9 @@ struct CompanionControls:View {
             HStack{Text("Name").font(.headline);TextField("Vigil",text:$name).textFieldStyle(.roundedBorder).accessibilityIdentifier("companion.name")}
             VStack(alignment:.leading,spacing:8){
                 HStack{Text("Colour").font(.headline);Spacer();Text((CompanionColour(rawValue:colour) ?? .blueberry).title).foregroundStyle(.secondary)}
-                HStack(spacing:12){ForEach(CompanionColour.allCases,id:\.self){item in
+                HStack(spacing:6){ForEach(CompanionColour.allCases,id:\.self){item in
                     Button{colour=item.rawValue}label:{
-                        Circle().fill(LinearGradient(colors:item.colours.map{Color(hex:$0)},startPoint:.topLeading,endPoint:.bottomTrailing)).frame(width:32,height:32).padding(4)
+                        Circle().fill(LinearGradient(colors:item.colours.map{Color(hex:$0)},startPoint:.topLeading,endPoint:.bottomTrailing)).frame(width:36,height:36).padding(4)
                             .overlay{Circle().strokeBorder(colour==item.rawValue ? Color.primary:Color.clear,lineWidth:2)}
                     }.buttonStyle(.plain).accessibilityLabel(item.title).accessibilityAddTraits(colour==item.rawValue ? .isSelected:[]).accessibilityIdentifier("companion.colour.\(item.rawValue)")
                 }}

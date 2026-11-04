@@ -19,11 +19,12 @@ struct PhoneFaceScreen:View {
                 FaceView(animator:link.face,transparent:true)
                     .frame(width:width,height:width*390/844)
                     .frame(maxWidth:.infinity,maxHeight:.infinity,alignment:selected.alignment)
+                    .padding(.top,64).padding(.bottom,80)
                     .contentShape(Rectangle())
                     .gesture(DragGesture(minimumDistance:0).updating($held){_,value,_ in value=true}
                         .onChanged{value in
                             let cx=selected.left ? width/2:geometry.size.width-width/2
-                            let cy=selected.top ? width*390/844/2:geometry.size.height-width*390/844/2
+                            let cy=selected.top ? 64+width*390/844/2:geometry.size.height-80-width*390/844/2
                             link.face.touchGaze=CGPoint(x:(value.location.x-cx)/max(width/2,1),y:(value.location.y-cy)/max(width/3,1))
                         }.onEnded{_ in link.face.touchGaze=nil})
             }

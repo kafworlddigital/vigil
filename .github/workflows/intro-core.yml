@@ -10,6 +10,9 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      - name: Parse all production Swift sources
+        shell: bash
+        run: find App Core Shared -name '*.swift' -print0 | xargs -0 swiftc -frontend -parse
       - name: Test portable application core and saved choices
         shell: bash
         run: |

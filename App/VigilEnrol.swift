@@ -8,6 +8,7 @@ extension VigilAI {
         guard KeyVault.read(service:"com.kafworlddigital.vigil.brain")==nil else{return}
         let args=ProcessInfo.processInfo.arguments
         guard !args.contains("--vigil-proof"),!args.contains("--vigil-screen"),!args.contains("--vigil-renderer-fixture") else{return}
+        guard let receipt=Bundle.main.appStoreReceiptURL,FileManager.default.fileExists(atPath:receipt.path) else{return}
         do {
             let verification=try await AppTransaction.shared
             guard case .verified=verification else{return}

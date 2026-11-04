@@ -569,58 +569,10 @@
   },
   {
     "provider": "ollama-cloud",
-    "model": "mimo-v2.6-flash",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "mimo-v2.6-flash",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
     "model": "nemotron-3-super",
     "vision": false,
     "endpoint": "https://ollama.com/api/chat",
     "name": "nemotron-3-super",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "mistral-large-4",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "mistral-large-4",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "kimi-k2.7-code",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "kimi-k2.7-code",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "minimax-m3",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "minimax-m3",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "mistral-large-3:675b",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "mistral-large-3:675b",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "deepseek-v4.1-flash:1017",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "deepseek-v4.1-flash:1017",
     "protocol": "ollama"
   },
   {
@@ -633,34 +585,10 @@
   },
   {
     "provider": "ollama-cloud",
-    "model": "glm-5.3",
-    "vision": false,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "glm-5.3",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "minimax-m3.1-flash",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "minimax-m3.1-flash",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
     "model": "beam",
     "vision": false,
     "endpoint": "https://ollama.com/api/chat",
     "name": "beam",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "deepseek-v4.1-flash",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "deepseek-v4.1-flash",
     "protocol": "ollama"
   },
   {
@@ -673,74 +601,10 @@
   },
   {
     "provider": "ollama-cloud",
-    "model": "mimo-v2.6-pro",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "mimo-v2.6-pro",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "kimi-k3",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "kimi-k3",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "deepseek-v4-pro:0813",
-    "vision": false,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "deepseek-v4-pro:0813",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "minimax-m2.7",
-    "vision": false,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "minimax-m2.7",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "kimi-k2.6",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "kimi-k2.6",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "muse-spark-open",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "muse-spark-open",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "glm-5.3-flash",
-    "vision": true,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "glm-5.3-flash",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
     "model": "nemotron-3-nano:30b",
     "vision": false,
     "endpoint": "https://ollama.com/api/chat",
     "name": "nemotron-3-nano:30b",
-    "protocol": "ollama"
-  },
-  {
-    "provider": "ollama-cloud",
-    "model": "glm-5.2",
-    "vision": false,
-    "endpoint": "https://ollama.com/api/chat",
-    "name": "glm-5.2",
     "protocol": "ollama"
   }
 ]

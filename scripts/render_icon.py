@@ -5,10 +5,12 @@ wire=(r/'Shared/GooglyLink.swift').read_text().split('public struct Packet:')[0]
 icon=(r/'App/Character/VigilProof.swift').read_text().split('struct VigilIconView:View {')[1].rsplit('#endif',1)[0]
 sources=['import AppKit\nimport SwiftUI\n',wire,(r/'Shared/Palette.swift').read_text(),(r/'App/Character/BlobShape.swift').read_text(),(r/'App/Character/FaceView.swift').read_text(),'struct VigilIconView:View {'+icon]
 sources.append('''
+try MainActor.assumeIsolated {
 let renderer=ImageRenderer(content:VigilIconView().frame(width:1024,height:1024))
 renderer.scale=1
 guard let image=renderer.nsImage,let tiff=image.tiffRepresentation,let bitmap=NSBitmapImageRep(data:tiff),let png=bitmap.representation(using:.png,properties:[:])else{fatalError("Icon render failed")}
 try png.write(to:URL(fileURLWithPath:CommandLine.arguments[1]))
+}
 ''')
 temp=pathlib.Path('/tmp/vigil-icon-render.swift');temp.write_text('\n'.join(sources))
 master=r/'Resources/Vigil icon.png'

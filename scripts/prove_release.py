@@ -21,7 +21,9 @@ def screenshot(udid,path):
    if attempt:raise
    time.sleep(3)
 
-for family in ['iPhone','iPad']:
+families=[os.environ['VIGIL_SIM_FAMILY']] if os.environ.get('VIGIL_SIM_FAMILY') else ['iPhone','iPad']
+assert all(f in ['iPhone','iPad'] for f in families)
+for family in families:
  device=next((d for d in flat if family in d['name']),None)
  if not device:raise SystemExit('No available '+family+' simulator')
  # Keith gets a fresh simulator. Macy installs a separate bundle into that already-proven OS.
@@ -31,7 +33,7 @@ for family in ['iPhone','iPad']:
  else:
   udid=subprocess.check_output(['xcrun','simctl','create','Vigil-'+family,device['deviceTypeIdentifier'],device['runtime']],text=True,timeout=60).strip()
  device=dict(device,udid=udid,state='Shutdown')
- if device['state']!='Booted':subprocess.run(['xcrun','simctl','boot',udid],check=True)
+ if device['state']!='Booted':subprocess.run(['xcrun','simctl','boot',udid],check=True,timeout=120)
  subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True,timeout=600)
  # First-boot system services can remain busy after bootstatus completes.
  # Retry installation, then independently prove the launched PID survives.
@@ -42,8 +44,8 @@ for family in ['iPhone','iPad']:
   except (subprocess.TimeoutExpired,subprocess.CalledProcessError):
    if installAttempt:raise
    time.sleep(10)
- subprocess.run(['xcrun','simctl','ui',udid,'appearance','dark'],check=True)
- subprocess.run(['xcrun','simctl','io',udid,'orientation','landscapeLeft'],check=False,capture_output=True)
+ subprocess.run(['xcrun','simctl','ui',udid,'appearance','dark'],check=True,timeout=60)
+ subprocess.run(['xcrun','simctl','io',udid,'orientation','landscapeLeft'],check=False,capture_output=True,timeout=60)
  pid=None
  for launchAttempt in range(2):
   try:
@@ -58,7 +60,7 @@ for family in ['iPhone','iPad']:
    time.sleep(5)
  assert pid is not None
  time.sleep(15)
- check=subprocess.run(['xcrun','simctl','spawn',udid,'launchctl','list'],capture_output=True,text=True,check=True)
+ check=subprocess.run(['xcrun','simctl','spawn',udid,'launchctl','list'],capture_output=True,text=True,check=True,timeout=60)
  matching=[line for line in check.stdout.splitlines() if bundle in line and str(pid)==line.split()[0]]
  if not matching:raise SystemExit(f'{family} Release process did not survive 15 seconds')
  screenshot(udid,f'proofs/{prefix}{family}-Release.png')
@@ -75,4 +77,4 @@ for family in ['iPhone','iPad']:
  time.sleep(2)
  screenshot(udid,f'proofs/{prefix}{family}-home-icon.png')
  print(f'{family}: Release installed, launched and stayed up 15 seconds')
- subprocess.run(['xcrun','simctl','shutdown',udid],check=True)
+ subprocess.run(['xcrun','simctl','shutdown',udid],check=True,timeout=120)

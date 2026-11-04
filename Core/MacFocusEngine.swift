@@ -160,6 +160,8 @@ struct VigilScreen {
         policy=FocusNudgePolicy(maximumGap:settings.safeInterval*1.5);sync()
     }
     func receive(_ packet:Packet,reply:@escaping(Packet)->Void) {
+        if packet.command=="faceMood",let text=packet.text,let mood=Mood(rawValue:text) { VigilCharacterHost.shared.setMood(mood);return }
+        if packet.command=="faceRelease" { VigilCharacterHost.shared.releaseMood();return }
         switch packet.command {
         case "focusStart":
             let args=packet.text.flatMap{try? JSONSerialization.jsonObject(with:Data($0.utf8)) as? [String:Any]} ?? [:]
@@ -183,7 +185,8 @@ struct VigilScreen {
             onBroadcast?(Packet(command:"focusState",text:String(data:data,encoding:.utf8)))
         }
     }
-    private func notify(_ text:String) { nudgePanel.show(text);onBroadcast?(Packet(command:"nudge",text:text)) }
+    func testNudge() { notify("A little nudge from Vigil. Ready for your next step?") }
+    private func notify(_ text:String) { VigilCharacterHost.shared.nudge(text);onBroadcast?(Packet(command:"nudge",text:text)) }
     private func encodedState()->String? { (try? JSONEncoder().encode(state)).flatMap{String(data:$0,encoding:.utf8)} }
     private func cancelWork() { generation=UUID();task?.cancel();task=nil }
     private func findMeeting() {

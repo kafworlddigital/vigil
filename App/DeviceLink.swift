@@ -76,6 +76,8 @@ final class MacDeviceServer:ObservableObject {
 }
 #else
 final class PhoneDeviceLink:ObservableObject {
+    let face=FaceAnimator()
+    @Published var nudge=""
     @Published var state=VigilState()
     @Published var connected=false
     @Published var fresh=false
@@ -131,7 +133,12 @@ final class PhoneDeviceLink:ObservableObject {
                 try? FileManager.default.createDirectory(at:self.file.deletingLastPathComponent(),withIntermediateDirectories:true)
                 if let data=try? JSONEncoder().encode(self.state){try? data.write(to:self.file,options:.atomic)}
             }
-            if packet.command=="nudge",let text=packet.text { self.message=text }
+            if let face=packet.face { self.face.receive(face,at:Date.timeIntervalSinceReferenceDate) }
+            if packet.command=="nudge",let text=packet.text {
+                self.message=text;self.nudge=text;self.face.localMood = .surprised
+                VigilChirp.shared.play()
+                DispatchQueue.main.asyncAfter(deadline:.now()+8){[weak self] in self?.nudge="";self?.face.localMood=nil}
+            }
         }
         link.onState={ [weak self,weak link] state in
             guard let self,link===self.link else { return }

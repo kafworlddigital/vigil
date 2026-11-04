@@ -6,10 +6,14 @@ import CoreImage.CIFilterBuiltins
 
 @main struct VigilApp:App {
     #if os(macOS)
+    @NSApplicationDelegateAdaptor(VigilDelegate.self) private var delegate
+    @Environment(\.openWindow) private var openWindow
+    #endif
+    #if os(macOS)
     @StateObject private var engine=MacFocusEngine()
     @StateObject private var server=MacDeviceServer()
     var body:some Scene {
-        WindowGroup("Vigil") { MacRoot(engine:engine,server:server).frame(minWidth:640,minHeight:640) }
+        WindowGroup("Vigil",id:"main") { MacRoot(engine:engine,server:server).frame(minWidth:640,minHeight:640) }
             .defaultSize(width:760,height:800)
         MenuBarExtra("Vigil",systemImage:"eye"){
             Text(engine.state.session?.task ?? "Ready when you are.")
@@ -18,6 +22,10 @@ import CoreImage.CIFilterBuiltins
             Button("Pause focus"){engine.pause()}.disabled(engine.state.session?.status != .running)
             Button("Resume focus"){engine.resume()}.disabled(engine.state.session?.status != .paused)
             Button("End session"){engine.end()}
+            Button("Open focus, parking lot and calendar"){openWindow(id:"main")}
+            Toggle("Show desktop face",isOn:Binding(get:{VigilCharacterHost.shared.visible},set:{VigilCharacterHost.shared.setVisible($0)}))
+            Button("Move face (hold Option and drag)"){VigilCharacterHost.shared.showMoveHint()}
+            Button("Test a nudge"){engine.testNudge()}
             SettingsLink()
             Divider();Button("Quit Vigil"){NSApplication.shared.terminate(nil)}
         }
@@ -30,18 +38,10 @@ import CoreImage.CIFilterBuiltins
 
 private struct VigilCharacter:View {
     var listening:Bool=false
+    @State private var animator=FaceAnimator()
     var body:some View {
-        ZStack {
-            Ellipse().fill(.indigo.opacity(0.08)).frame(width:146,height:16).offset(y:67)
-            RoundedRectangle(cornerRadius:56,style:.continuous)
-                .fill(LinearGradient(colors:[Color(red:0.67,green:0.73,blue:0.97),Color(red:0.31,green:0.37,blue:0.73)],startPoint:.topLeading,endPoint:.bottomTrailing))
-                .frame(width:138,height:132).rotationEffect(.degrees(-3))
-            HStack(spacing:12){
-                ForEach(0..<2){_ in ZStack{Ellipse().fill(.white).frame(width:34,height:42);Ellipse().fill(Color(red:0.12,green:0.15,blue:0.28)).frame(width:13,height:21).offset(x:2,y:2);Circle().fill(.white).frame(width:5).offset(x:4,y:-3)}}
-            }.offset(y:-2)
-            Capsule().fill(Color.indigo.opacity(0.55)).frame(width:listening ? 20:14,height:listening ? 10:4).offset(y:32)
-            Image(systemName:"leaf.fill").font(.system(size:28)).foregroundStyle(Color(red:0.36,green:0.48,blue:0.43)).rotationEffect(.degrees(-25)).offset(x:5,y:-72)
-        }.frame(height:174).accessibilityLabel("Vigil, your blueberry focus companion")
+        FaceView(animator:animator).frame(height:180).clipShape(RoundedRectangle(cornerRadius:22))
+            .onChange(of:listening,initial:true){_,held in animator.localMood=held ? .listening : nil}
     }
 }
 private struct HoldToTalk:View {
@@ -76,6 +76,7 @@ struct FocusDashboard:View {
     @State private var minutes=30.0
     @State private var idea=""
     @State private var showParking=false
+    @State private var showHistory=false
     @State private var showSettings=false
     private var sessions:[FocusSession] {
         guard let s=state.session,!state.history.contains(where:{$0.id==s.id}) else{return state.history}
@@ -112,10 +113,12 @@ struct FocusDashboard:View {
                 HStack{Text("Today").font(.headline);Spacer();Button("Parking lot (\(state.ideas.count))"){showParking=true}.font(.callout)}
                 let summary=DailySummary(sessions:sessions,ideas:state.ideas)
                 HStack(spacing:0){metric("\(summary.focusMinutes)","focus minutes");Divider();metric("\(summary.driftCount)","gentle nudges");Divider();metric("\(summary.parkedCount)","ideas parked")}.frame(height:70)
+                Button("Focus history"){showHistory=true}
                 Text("Work screens stay private. Ideas can wait for Sunday.").font(.caption).foregroundStyle(.secondary).frame(maxWidth:.infinity)
             }.padding(24).frame(maxWidth:700).frame(maxWidth:.infinity)
         }.tint(Color(red:0.37,green:0.42,blue:0.71))
         .onAppear{speech.onResult=voice;calendar.refresh()}
+        .sheet(isPresented:$showHistory){VigilHistoryView(sessions:sessions)}
         .sheet(isPresented:$showParking){ParkingView(ideas:state.ideas)}
         .sheet(isPresented:$showSettings){VigilSettingsView(state:state){value in
             if let data=try? JSONEncoder().encode(value){command("focusSettings",String(data:data,encoding:.utf8))}
@@ -151,6 +154,11 @@ struct VigilSettingsView:View {
     @State private var key=""
     @State private var goKey=""
     @State private var feedback=""
+    @State private var testing=false
+    @State private var results:[ConnectionResult]=[]
+    @AppStorage("vigil.face.visible") private var faceVisible=true
+    @AppStorage("vigil.face.width") private var faceWidth=260.0
+    @AppStorage("vigil.pointer.trail") private var trail="comet"
     @Environment(\.dismiss) private var dismiss
     var body:some View {
         ScrollView{VStack(alignment:.leading,spacing:20){
@@ -162,6 +170,18 @@ struct VigilSettingsView:View {
             LabeledContent("Model in use",value:state.model)
             LabeledContent("Running cost",value:String(format:"$%.2f",state.costUSD))
             LabeledContent("Requests today",value:"\(state.requestsToday) / 50 safe allowance")
+            Button(testing ? "Testing connections…" : "Test connection"){
+                testing=true
+                Task { results=await ConnectionTester.run();testing=false }
+            }.disabled(testing)
+            ForEach(results){result in Text("\(result.ok ? "✓" : "✗") \(result.provider) · \(result.model) · \(result.detail)").font(.caption)}
+            #if os(macOS)
+            Toggle("Show desktop face",isOn:$faceVisible).onChange(of:faceVisible){_,v in VigilCharacterHost.shared.setVisible(v)}
+            Text("Face size · \(Int(faceWidth)) points").font(.caption)
+            Slider(value:$faceWidth,in:160...440,step:20).onChange(of:faceWidth){_,_ in VigilCharacterHost.shared.resize()}
+            Text("Hold Option and drag the face to move it. Ordinary clicks pass through.").font(.caption)
+            Picker("Cursor trail",selection:$trail){Text("Comet").tag("comet");Text("String").tag("string");Text("None").tag("none")}
+            #endif
             Divider();Text("OpenRouter key").font(.headline)
             SecureField("Paste a key",text:$key).textFieldStyle(.roundedBorder)
             Button("Save securely"){
@@ -169,12 +189,12 @@ struct VigilSettingsView:View {
             }.disabled(key.isEmpty)
             #if os(macOS)
             Button("Read Orca API Key from Tuck"){feedback=KeyVault.importTuckIfAvailable() ? "OpenRouter key is ready.":"Tuck keeps this key private. Copy it from Tuck and paste it above."}
-            DisclosureGroup("Optional OpenCode Go wording"){
+            DisclosureGroup("OpenCode key"){
                 SecureField("Paste an existing Go key",text:$goKey).textFieldStyle(.roundedBorder)
                 Button("Save Go key securely"){
-                    do{try KeyVault.write(goKey,service:"com.kafworlddigital.vigil.opencode");goKey="";feedback="Go key saved. Used only with paid fallback enabled."}catch{feedback="Couldn't save that key."}
+                    do{try KeyVault.write(goKey,service:"com.kafworlddigital.vigil.opencode");goKey="";feedback="OpenCode key saved. Free connection test is available."}catch{feedback="Couldn't save that key."}
                 }.disabled(goKey.isEmpty)
-                Text("Uses your existing Go allowance for short reminders. Go usage is separate from the OpenRouter cost above.").font(.caption).foregroundStyle(.secondary)
+                Text("Free OpenCode models may require the official OpenCode client. Paid Go calls need the paid fallback opt-in.").font(.caption).foregroundStyle(.secondary)
             }
             Button("Allow screen checks"){_ = CGRequestScreenCaptureAccess()}
             Text("Only non-work screens go to OpenRouter. Calendar is read only; speech stays on this Mac.").font(.caption).foregroundStyle(.secondary)
@@ -199,7 +219,7 @@ struct MacRoot:View {
             engine.receive(Packet(command:name,text:text)){_ in}
         },pairing:{showPair=true})
         .safeAreaInset(edge:.bottom){if !engine.error.isEmpty{Text(engine.error).font(.callout).padding()}}
-        .task{engine.onBroadcast=server.broadcast;server.onPacket=engine.receive;server.start();engine.sync()}
+        .task{engine.onBroadcast=server.broadcast;server.onPacket=engine.receive;server.start();VigilCharacterHost.shared.start(server:server);engine.sync()}
         .sheet(isPresented:$showPair){MacPairView(record:server.pairing)}
     }
 }
@@ -217,7 +237,7 @@ struct PhoneRoot:View {
     @State private var showPair=false
     @Environment(\.scenePhase) private var phase
     var body:some View{
-        FocusDashboard(state:link.state,connected:link.connected && link.fresh,connectionText:link.connected ? (link.fresh ? "Your Mac is connected":"Reconnecting to your Mac…"):link.message,command:link.send,pairing:{showPair=true})
+        PhoneFaceScreen(link:link,pair:{showPair=true})
             .task{link.start()}
             .onChange(of:link.state.session?.status){_,status in UIApplication.shared.isIdleTimerDisabled = status == .running && phase == .active}
             .onChange(of:phase){_,new in

@@ -9,7 +9,7 @@ public enum GooglyService {
 }
 
 public enum Mood: String, Codable, CaseIterable, Sendable {
-    case listening, resting, thinking, talking, pointing, happy, sleepy
+    case listening, resting, thinking, talking, pointing, happy, sleepy, surprised
 
     public var title: String { rawValue.capitalized }
 }

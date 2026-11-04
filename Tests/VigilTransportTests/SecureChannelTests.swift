@@ -20,3 +20,14 @@ final class SecureChannelTests:XCTestCase {
         XCTAssertThrowsError(try client.open(corrupted))
     }
 }
+
+final class VigilMoodCompatibilityTests:XCTestCase {
+    func testAllOriginalMoodsAndSurpriseRoundTrip() throws {
+        for mood in Mood.allCases {
+            let face=FaceState(gazeX:-0.8,gazeY:0.75,mood:mood)
+            let data=try JSONEncoder().encode(Packet(face:face))
+            XCTAssertEqual(try JSONDecoder().decode(Packet.self,from:data).face,face)
+        }
+        XCTAssertNotNil(Mood(rawValue:"listening"));XCTAssertNotNil(Mood(rawValue:"surprised"))
+    }
+}

@@ -31,11 +31,14 @@ import QuartzCore
         let screen=NSScreen.screens.first?.frame ?? CGRect(x:0,y:0,width:1440,height:900)
         let left=NSScreen.screens.min(by:{$0.frame.minX<$1.frame.minX})?.frame ?? screen
         let right=NSScreen.screens.max(by:{$0.frame.maxX<$1.frame.maxX})?.frame ?? screen
+        let eyeY=host.panel.map{$0.frame.minY+$0.frame.height*0.485} ?? screen.midY
+        let leftEyeY=min(left.maxY-20,max(left.minY+20,eyeY))
+        let rightEyeY=min(right.maxY-20,max(right.minY+20,eyeY))
         DispatchQueue.main.asyncAfter(deadline:.now()+2){
-            host.setMood(.listening);if fixture{host.rendererFixtureGaze=CGPoint(x:-0.92,y:-0.85)};warp(left.minX+40,screen.maxY-left.midY)
+            host.setMood(.listening);if fixture{host.rendererFixtureGaze=CGPoint(x:-0.92,y:-0.85)};warp(left.minX+40,screen.maxY-leftEyeY)
         }
         DispatchQueue.main.asyncAfter(deadline:.now()+4){sample();save(host.panel?.contentView,"Mac-face-left.png")}
-        DispatchQueue.main.asyncAfter(deadline:.now()+5){if fixture{host.rendererFixtureGaze=CGPoint(x:0.92,y:0.85)};warp(right.maxX-40,screen.maxY-right.midY)}
+        DispatchQueue.main.asyncAfter(deadline:.now()+5){if fixture{host.rendererFixtureGaze=CGPoint(x:0.92,y:0.85)};warp(right.maxX-40,screen.maxY-rightEyeY)}
         DispatchQueue.main.asyncAfter(deadline:.now()+7){sample();save(host.panel?.contentView,"Mac-face-right.png");save(host.panel?.contentView,"Mac-animation-1.png")}
         DispatchQueue.main.asyncAfter(deadline:.now()+8){save(host.panel?.contentView,"Mac-animation-2.png");host.nudge("A little nudge. Ready for your next step?")}
         DispatchQueue.main.asyncAfter(deadline:.now()+8.3){save(host.cursor.view,"Mac-cursor-flight.png")}

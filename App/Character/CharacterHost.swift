@@ -56,21 +56,23 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         panel=p;resize();setVisible(visible)
         cursor.onFace={ [weak self] frame in
             guard let self else{return}
+            // Keep upstream's phone gaze: it sits BELOW the monitor and looks up at the mouse/buddy.
+            // The added desktop face looks from its own eyes towards the cursor on any display.
             var face=frame
-            // Use the union of desktop displays, so the added Mac face tracks every display.
-            let desktop=NSScreen.screens.map(\.frame).reduce(CGRect.null){$0.union($1)}
             let global=CGEvent(source:nil)?.location ?? .zero
             let m=NSPoint(x:global.x,y:(NSScreen.screens.first?.frame.maxY ?? 0)-global.y)
             self.sampledMouse=global
-            if !desktop.isNull {
-                face.gazeX=max(-1,min(1,(m.x-desktop.midX)/(desktop.width/2)))
-                face.gazeY=max(-1,min(1,(desktop.midY-m.y)/(desktop.height/2)))
+            if let panel=self.panel {
+                let eyes=CGPoint(x:panel.frame.midX,y:panel.frame.minY+panel.frame.height*0.485)
+                let dx=m.x-eyes.x,dy=eyes.y-m.y
+                let reach=max(100,hypot(dx,dy))
+                face.gazeX=dx/reach;face.gazeY=dy/reach
             }
             if let fixture=self.rendererFixtureGaze {face.gazeX=fixture.x;face.gazeY=fixture.y}
             self.sampledFace=face
             self.animator.receive(face,at:Date.timeIntervalSinceReferenceDate)
             let now=CACurrentMediaTime()
-            if now-self.lastBroadcast>=1.0/30 {self.lastBroadcast=now;self.server?.broadcast(Packet(face:face))}
+            if now-self.lastBroadcast>=1.0/30 {self.lastBroadcast=now;self.server?.broadcast(Packet(face:frame))}
         }
         cursor.start()
         VigilProof.begin(host:self)

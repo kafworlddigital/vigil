@@ -46,15 +46,19 @@ private struct VigilCharacter:View {
 }
 private struct HoldToTalk:View {
     @ObservedObject var speech:OnDeviceSpeech
-    @State private var pressing=false
+    @GestureState private var pressing=false
+    @Environment(\.scenePhase) private var scenePhase
     var body:some View {
         VStack(spacing:7){
             VigilCharacter(listening:speech.listening)
             Label(speech.listening ? "Listening on this device…":"Hold to talk",systemImage:speech.listening ? "waveform":"mic")
                 .font(.subheadline.weight(.medium))
-        }.contentShape(Rectangle()).gesture(DragGesture(minimumDistance:0).onChanged{_ in
-            if !pressing{pressing=true;Task{await speech.begin()}}
-        }.onEnded{_ in pressing=false;speech.finish()})
+        }.contentShape(Rectangle())
+        .gesture(DragGesture(minimumDistance:0).updating($pressing){_,held,_ in held=true})
+        .onChange(of:pressing){_,held in
+            if held{Task{@MainActor in if pressing{await speech.begin()}}}else{speech.finish()}
+        }
+        .onChange(of:scenePhase){_,phase in if phase != .active{speech.cancel()}}
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Hold while saying your task, or park this followed by an idea")
         .onDisappear{speech.cancel()}

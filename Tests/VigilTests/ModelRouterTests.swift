@@ -12,6 +12,12 @@ final class ModelRouterTests:XCTestCase {
         let mock=HealthTransport()
         let router=ModelHealthRouter(candidates:[go,or,nim],keys:keys,transport:mock)
         await router.probeAll()
+        // Control the measured ranking: a loaded runner may resume sleeping tasks in any order.
+        var ranked:[ModelHealth]=[]
+        for (index,candidate) in [go,or,nim].enumerated() {
+            var state=ModelHealth(candidate);state.status="green";state.checkedAt=Date();state.latency=Double(index+1)/10;ranked.append(state)
+        }
+        await router.importHealth(ranked)
         let before=await router.snapshot();XCTAssertEqual(before.map(\.provider),["opencode-go","openrouter","nvidia"])
         await mock.fail(["opencode-go":429,"openrouter":401])
         let reply=try await router.complete(ModelPrompt(text:"Synthetic task"))

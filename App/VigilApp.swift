@@ -13,7 +13,7 @@ import CoreImage.CIFilterBuiltins
     @StateObject private var engine=MacFocusEngine()
     @StateObject private var server=MacDeviceServer()
     var body:some Scene {
-        WindowGroup("Vigil",id:"main") { MacRoot(engine:engine,server:server).frame(minWidth:640,minHeight:640) }
+        WindowGroup("Vigil",id:"main") { VigilProofScreen(state:engine.state){MacRoot(engine:engine,server:server)}.frame(minWidth:640,minHeight:640) }
             .defaultSize(width:760,height:800)
         MenuBarExtra("Vigil",systemImage:"eye"){
             Text(engine.state.session?.task ?? "Ready when you are.")
@@ -27,9 +27,11 @@ import CoreImage.CIFilterBuiltins
             Button("Move face (hold Option and drag)"){VigilCharacterHost.shared.showMoveHint()}
             Menu("Expressions") {ForEach([Mood.happy,.surprised,.listening,.sleepy,.thinking],id:\.rawValue){mood in Button(mood.title){VigilCharacterHost.shared.setMood(mood)}};Button("Automatic expressions"){VigilCharacterHost.shared.releaseMood()}}
             Button("Test a nudge"){engine.testNudge()}
+            Button("Help"){openWindow(id:"help")}
             SettingsLink()
             Divider();Button("Quit Vigil"){NSApplication.shared.terminate(nil)}
         }
+        Window("Vigil Help",id:"help"){VigilHelpView().frame(minWidth:560,minHeight:600)}
         SwiftUI.Settings { VigilSettingsView(state:engine.state,changed:engine.updateSettings).frame(width:460).padding() }
     }
     #else
@@ -154,6 +156,7 @@ struct VigilSettingsView:View {
     @State private var value=VigilSettings()
     @State private var key=""
     @State private var goKey=""
+    @State private var showHelp=false
     @State private var feedback=""
     @State private var testing=false
     @State private var results:[ConnectionResult]=[]
@@ -166,11 +169,14 @@ struct VigilSettingsView:View {
             HStack{Text("Settings").font(.title2.weight(.semibold));Spacer();Button("Done"){dismiss()}}
             Text("Vigil \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0") · Build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")").font(.subheadline).foregroundStyle(.secondary)
             VStack(alignment:.leading,spacing:8){Text("Screen checks").font(.headline);Text("Every \(Int(value.safeInterval)) seconds");Slider(value:$value.interval,in:30...120,step:30).onChange(of:value.interval){_,_ in changed(value)};Text("Checks run only during a declared task. Free requests have a daily limit; the timer keeps running if they run out.").font(.caption).foregroundStyle(.secondary)}
-            Toggle("Allow paid fallback",isOn:$value.allowPaidFallback).onChange(of:value.allowPaidFallback){_,_ in changed(value)}
-            Text(value.allowPaidFallback ? "Cheap fallback only, up to $0.20 input / $0.80 output per million tokens. A configured OpenCode Go key can be used for wording.":"Free models only.").font(.caption).foregroundStyle(.secondary)
+            Button("Help"){showHelp=true}
+            Link("Report a problem",destination:VigilSupport.reportURL)
+            ModelHealthView()
+            Button("Show intro again"){dismiss();DispatchQueue.main.asyncAfter(deadline:.now()+0.3){NotificationCenter.default.post(name:Notification.Name("vigil.showIntro"),object:nil)}}
+            Text("Your included Go plan, free models and on-device help. No OpenAI or GPT models.").font(.caption).foregroundStyle(.secondary)
             LabeledContent("Model in use",value:state.model)
             LabeledContent("Running cost",value:String(format:"$%.2f",state.costUSD))
-            LabeledContent("Requests today",value:"\(state.requestsToday) / 50 safe allowance")
+            Text("Remote models use the included Go or free allowance. Limits never stop your timer.").font(.caption).foregroundStyle(.secondary)
             Button(testing ? "Testing connections…" : "Test connection"){
                 testing=true
                 Task { results=await ConnectionTester.run();testing=false }
@@ -183,30 +189,14 @@ struct VigilSettingsView:View {
             Text("Hold Option and drag the face to move it. Ordinary clicks pass through.").font(.caption)
             Picker("Cursor trail",selection:$trail){Text("Comet").tag("comet");Text("String").tag("string");Text("None").tag("none")}
             #endif
-            Divider();Text("OpenRouter key").font(.headline)
-            SecureField("Paste a key",text:$key).textFieldStyle(.roundedBorder)
-            Button("Save securely"){
-                do{try KeyVault.write(key);key="";feedback="Saved in this device's Keychain."}catch{feedback="Couldn't save the key. Please try again."}
-            }.disabled(key.isEmpty)
             #if os(macOS)
-            Button("Read Orca API Key from Tuck"){feedback=KeyVault.importTuckIfAvailable() ? "OpenRouter key is ready.":"Tuck keeps this key private. Copy it from Tuck and paste it above."}
-            DisclosureGroup("OpenCode key"){
-                SecureField("Paste an existing Go key",text:$goKey).textFieldStyle(.roundedBorder)
-                Button("Save Go key securely"){
-                    do{try KeyVault.write(goKey,service:"com.kafworlddigital.vigil.opencode");goKey="";feedback="OpenCode key saved. Free connection test is available."}catch{feedback="Couldn't save that key."}
-                }.disabled(goKey.isEmpty)
-                Text("Free OpenCode models may require the official OpenCode client. Paid Go calls need the paid fallback opt-in.").font(.caption).foregroundStyle(.secondary)
-            }
             Button("Allow screen checks"){_ = CGRequestScreenCaptureAccess()}
-            Text("Only non-work screens go to OpenRouter. Calendar is read only; speech stays on this Mac.").font(.caption).foregroundStyle(.secondary)
-            #else
-            Text("Your Mac needs its own OpenRouter key. Keys are never sent over pairing.").font(.caption).foregroundStyle(.secondary)
             #endif
             if !feedback.isEmpty{Text(feedback).font(.callout)}
             Divider();Text("Work privacy guard").font(.headline)
             ForEach(PrivacyGuard.displayList,id:\.self){Text($0).font(.callout)}
             Text("Any visible work window skips the whole check. It is recorded as private (skipped), never off-task.").font(.caption).foregroundStyle(.secondary)
-        }.padding(24).frame(maxWidth:600,alignment:.leading)}.frame(minWidth:300,minHeight:500).onAppear{value=state.settings;feedback=KeyVault.read() != nil ? "OpenRouter key is ready.":"Paste your OpenRouter key to enable checks."}
+        }.padding(24).frame(maxWidth:600,alignment:.leading)}.frame(minWidth:300,minHeight:500).sheet(isPresented:$showHelp){VigilHelpView()}.onAppear{value=state.settings;feedback="On-device help is ready. Connect this device to use the server."}
     }
 }
 #if os(macOS)
@@ -238,7 +228,7 @@ struct PhoneRoot:View {
     @State private var showPair=false
     @Environment(\.scenePhase) private var phase
     var body:some View{
-        PhoneFaceScreen(link:link,pair:{showPair=true})
+        VigilProofScreen(state:link.state){PhoneFaceScreen(link:link,pair:{showPair=true})}
             .task{link.start()}
             .onChange(of:link.state.session?.status){_,status in UIApplication.shared.isIdleTimerDisabled = status == .running && phase == .active}
             .onChange(of:phase){_,new in

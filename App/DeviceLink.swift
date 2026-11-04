@@ -9,7 +9,7 @@ import AVFoundation
 #endif
 
 enum VigilPairing {
-    static let service="com.kafworlddigital.vigil.pairing"
+    static var service:String {VigilEdition.keyPrefix+".pairing"}
     static func save(_ record:PairingRecord) throws {
         let data=try JSONEncoder().encode(record)
         try KeyVault.write(data.base64EncodedString(),service:service,account:"paired-mac")
@@ -40,7 +40,7 @@ final class MacDeviceServer:ObservableObject {
         guard listener==nil,let pairing,let key=pairing.key else { return }
         do {
             let listener=try NWListener(using:.googly)
-            listener.service=NWListener.Service(name:pairing.service,type:GooglyService.type,txtRecord:NWTXTRecord(["vigil-id":pairing.identifier]))
+            listener.service=NWListener.Service(name:pairing.service,type:VigilEdition.bonjour,txtRecord:NWTXTRecord(["vigil-id":pairing.identifier]))
             listener.newConnectionHandler={ [weak self] connection in
                 guard let self else { return }
                 let link=LineConnection(connection,secret:key,server:true),id=ObjectIdentifier(connection)
@@ -89,14 +89,14 @@ final class PhoneDeviceLink:ObservableObject {
     private var receivedAt=Date.distantPast
     private var outbox:[ParkedIdea]=[]
     private var outboxFile:URL { file.deletingLastPathComponent().appendingPathComponent("parked-outbox.json") }
-    private var file:URL { FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Vigil/summary.json") }
+    private var file:URL { FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent(VigilEdition.folder+"/summary.json") }
     init() {
         if let data=try? Data(contentsOf:file),let saved=try? JSONDecoder().decode(VigilState.self,from:data){state=saved}
         if let data=try? Data(contentsOf:outboxFile),let saved=try? JSONDecoder().decode([ParkedIdea].self,from:data){outbox=saved}
     }
     func start() {
         guard browser==nil else { return }
-        let browser=NWBrowser(for:.bonjourWithTXTRecord(type:GooglyService.type,domain:nil),using:.googly)
+        let browser=NWBrowser(for:.bonjourWithTXTRecord(type:VigilEdition.bonjour,domain:nil),using:.googly)
         browser.browseResultsChangedHandler={ [weak self] _,_ in self?.connect() }
         browser.stateUpdateHandler={ [weak self] state in if case .failed=state { self?.stop();self?.scheduleRetry() } }
         self.browser=browser;browser.start(queue:.main)

@@ -26,10 +26,11 @@ enum KeyVault {
         guard status==errSecSuccess else { throw VaultError.saveFailed }
     }
     private static func base(_ service:String,_ account:String)->[String:Any] {
-        [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:account]
+        [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:(VigilEdition.macy && !service.contains(".vigil.m.") ? service.replacingOccurrences(of:"com.kafworlddigital.vigil.",with:"com.kafworlddigital.vigil.m."):service),kSecAttrAccount as String:account]
     }
     #if os(macOS)
     static func importTuckIfAvailable()->Bool {
+        guard !VigilEdition.macy else { return false }
         if read() != nil { return true }
         for attribute in [kSecAttrLabel,kSecAttrAccount] {
             let query:[String:Any]=[kSecClass as String:kSecClassGenericPassword,attribute as String:"Orca API Key",

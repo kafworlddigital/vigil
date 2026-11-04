@@ -10,7 +10,7 @@ public struct URLTransport: HTTPTransport {
     public init() {}
     public func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let config = URLSessionConfiguration.ephemeral
-        config.urlCache = nil; config.httpCookieStorage = nil
+        config.urlCache = nil; config.httpCookieStorage = nil; config.timeoutIntervalForResource=request.timeoutInterval
         let session = URLSession(configuration: config)
         defer { session.finishTasksAndInvalidate() }
         let (data, response) = try await session.data(for: request)

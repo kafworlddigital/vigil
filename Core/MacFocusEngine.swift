@@ -94,7 +94,7 @@ enum VigilPointing {
     private var observers:[NSObjectProtocol]=[]
     private let nudgePanel=VigilNudgePanel()
     init() {
-        folder=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Vigil",isDirectory:true)
+        folder=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent(VigilEdition.folder,isDirectory:true)
         try? FileManager.default.createDirectory(at:folder,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
         file=folder.appendingPathComponent("state.json")
         router=OpenRouterClient(cacheURL:folder.appendingPathComponent("models.json"),usageURL:folder.appendingPathComponent("usage.json"))
@@ -160,7 +160,7 @@ enum VigilPointing {
         guard FileManager.default.fileExists(atPath:base.path) else {
             if !pendingIdeas.isEmpty { state.notice="Idea saved here. iCloud copy will catch up when available." };return
         }
-        let writer=ParkingLotWriter(url:base.appendingPathComponent("Vigil/Parking Lot.md"))
+        let writer=ParkingLotWriter(url:base.appendingPathComponent(VigilEdition.folder+"/Parking Lot.md"))
         for id in pendingIdeas {
             guard let idea=state.ideas.first(where:{$0.id==id}) else { continue }
             do { try writer.append(idea);pendingIdeas.removeAll{$0==id} }
@@ -242,12 +242,10 @@ enum VigilPointing {
             defer { if generation==token { task=nil } }
             do {
                 try WorkScreenGuard.check()
-                guard let key=KeyVault.read() else { throw RouterError.keyMissing }
                 let snapshot=try await VigilScreen.capture()
                 guard generation==token,!Task.isCancelled else { return }
                 let captured=ProcessInfo.processInfo.systemUptime
-                let answer=try await router.classify(jpeg:snapshot.jpeg,ocr:snapshot.ocr,app:snapshot.app,task:session.task,key:key,
-                    allowPaid:settings.allowPaidFallback,permitsSend:{ @Sendable [weak self] in
+                let answer=try await VigilAI.shared.classify(jpeg:snapshot.jpeg,ocr:snapshot.ocr,app:snapshot.app,task:session.task,permitsSend:{ @Sendable [weak self] in
                         await MainActor.run {
                             guard let self,self.generation==token,self.state.session?.status == .running,
                                   ProcessInfo.processInfo.systemUptime-captured<20 else { return false }
@@ -259,8 +257,7 @@ enum VigilPointing {
                 var check=FocusCheck(elapsed:state.session?.elapsed ?? session.elapsed,activity:age<=20 ? answer.activity : .unavailable,
                     probability:answer.probability,confidence:answer.confidence,probabilities:answer.probabilities,sampleDuration:settings.safeInterval)
                 if policy.observe(check,age:age) {
-                    let message=await router.nudge(task:session.task,key:key,allowPaid:settings.allowPaidFallback,
-                        goKey:KeyVault.read(service:"com.kafworlddigital.vigil.opencode"),permitsSend:{ @Sendable [weak self] in
+                    let message=await VigilAI.shared.nudge(task:session.task,permitsSend:{ @Sendable [weak self] in
                             await MainActor.run { guard let self,self.generation==token else { return false }; return (try? WorkScreenGuard.check()) != nil }
                         })
                     guard generation==token,!Task.isCancelled else { return }
@@ -268,7 +265,7 @@ enum VigilPointing {
                     check.nudged=true;state.notice=message;notify(message,target:VigilPointing.currentWindow())
                 }
                 state.session?.checks.append(check);state.session?.detail=check.activity == .uncertain ? "Not enough context to judge" : check.activity == .onTask ? "On task" : "Checking gently before nudging"
-                let usage=await router.currentUsage();state.model=usage.lastModel;state.costUSD=usage.cost;state.requestsToday=usage.requests
+                let usage=await router.currentUsage();state.model=VigilAI.shared.lastModel;state.costUSD=usage.cost;state.requestsToday=usage.requests
                 sync()
             } catch {
                 guard generation==token,!Task.isCancelled else { return }
@@ -276,7 +273,7 @@ enum VigilPointing {
                 let privateSkip=(error as? RouterError) == .privateScreen
                 state.session?.checks.append(FocusCheck(elapsed:session.elapsed,activity:privateSkip ? .privateSkipped : .unavailable,sampleDuration:settings.safeInterval))
                 state.session?.detail=privateSkip ? "private (skipped)" : (error as? RouterError)?.localizedDescription ?? "Check unavailable. Your timer is still running."
-                let usage=await router.currentUsage();state.model=usage.lastModel;state.costUSD=usage.cost;state.requestsToday=usage.requests
+                let usage=await router.currentUsage();state.model=VigilAI.shared.lastModel;state.costUSD=usage.cost;state.requestsToday=usage.requests
                 if (error as? RouterError) == .dailyLimit { lastCheck=(state.session?.elapsed ?? 0)+3600 }
                 sync()
             }

@@ -2,74 +2,170 @@ name: Vigil
 options:
   bundleIdPrefix: com.kafworlddigital.vigil
   deploymentTarget:
-    iOS: "17.0"
-    macOS: "14.0"
+    iOS: '17.0'
+    macOS: '14.0'
 settings:
   base:
-    SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "3"
+    SWIFT_VERSION: '5.0'
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '4'
     DEVELOPMENT_TEAM: V892V3PC6T
     CODE_SIGN_STYLE: Automatic
-    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: true
 targets:
   Vigil:
     type: application
     platform: iOS
     sources:
-      - App
-      - Core
-      - path: Shared
-        excludes: [Fonts, VoiceTurnBuffer.swift]
-      - Resources/Assets.xcassets
+    - App
+    - Core
+    - path: Shared
+      excludes:
+      - Fonts
+      - VoiceTurnBuffer.swift
+    - Resources/Assets.xcassets
+    - Resources/model-candidates.json
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kafworlddigital.vigil.ios
         PRODUCT_NAME: Vigil
-        TARGETED_DEVICE_FAMILY: "1,2"
+        TARGETED_DEVICE_FAMILY: 1,2
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        GENERATE_INFOPLIST_FILE: YES
+        GENERATE_INFOPLIST_FILE: true
     info:
       path: Config/iOS-Info.plist
       properties:
         CFBundleDisplayName: Vigil
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        NSLocalNetworkUsageDescription: Vigil pairs securely with your Mac on the same Wi-Fi.
-        NSBonjourServices: [_vigil._tcp]
+        UISupportedInterfaceOrientations:
+        - UIInterfaceOrientationLandscapeLeft
+        - UIInterfaceOrientationLandscapeRight
+        NSLocalNetworkUsageDescription: Vigil pairs securely with your Mac on the
+          same Wi-Fi.
+        NSBonjourServices:
+        - _vigil._tcp
         NSCameraUsageDescription: Scan your Mac's private Vigil pairing code.
-        NSMicrophoneUsageDescription: Hold to talk to start a focus session or park an idea.
-        NSSpeechRecognitionUsageDescription: Vigil recognises your words on this device, without uploading audio.
-        NSCalendarsFullAccessUsageDescription: Choose today's calendar events as focus tasks. Vigil never changes your calendar.
+        NSMicrophoneUsageDescription: Hold to talk to start a focus session or park
+          an idea.
+        NSSpeechRecognitionUsageDescription: Vigil recognises your words on this device,
+          without uploading audio.
+        NSCalendarsFullAccessUsageDescription: Choose today's calendar events as focus
+          tasks. Vigil never changes your calendar.
   VigilMac:
     type: application
     platform: macOS
     sources:
-      - App
-      - Core
-      - path: Shared
-        excludes: [Fonts, VoiceTurnBuffer.swift]
-      - Resources/Assets.xcassets
+    - App
+    - Core
+    - path: Shared
+      excludes:
+      - Fonts
+      - VoiceTurnBuffer.swift
+    - Resources/AppIcon.icns
+    - Resources/model-candidates.json
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kafworlddigital.vigil.mac
         PRODUCT_NAME: Vigil
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        GENERATE_INFOPLIST_FILE: YES
-        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: true
+        ENABLE_HARDENED_RUNTIME: true
         CODE_SIGN_ENTITLEMENTS: Config/VigilMac.entitlements
     info:
       path: Config/Mac-Info.plist
       properties:
         CFBundleDisplayName: Vigil
+        CFBundleIconFile: AppIcon.icns
         LSUIElement: true
         NSPrincipalClass: NSApplication
-        NSMicrophoneUsageDescription: Hold to talk to start a focus session or park an idea.
-        NSSpeechRecognitionUsageDescription: Vigil recognises speech on this Mac without uploading audio.
-        NSCalendarsFullAccessUsageDescription: Choose today's events and receive a ten-minute meeting heads-up. Vigil never changes your calendar.
-        NSLocalNetworkUsageDescription: Vigil pairs with your iPhone and iPad on the same Wi-Fi.
-        NSBonjourServices: [_vigil._tcp]
+        NSMicrophoneUsageDescription: Hold to talk to start a focus session or park
+          an idea.
+        NSSpeechRecognitionUsageDescription: Vigil recognises speech on this Mac without
+          uploading audio.
+        NSCalendarsFullAccessUsageDescription: Choose today's events and receive a
+          ten-minute meeting heads-up. Vigil never changes your calendar.
+        NSLocalNetworkUsageDescription: Vigil pairs with your iPhone and iPad on the
+          same Wi-Fi.
+        NSBonjourServices:
+        - _vigil._tcp
+  VigilMacy:
+    type: application
+    platform: iOS
+    sources:
+    - App
+    - Core
+    - path: Shared
+      excludes:
+      - Fonts
+      - VoiceTurnBuffer.swift
+    - Resources/Assets.xcassets
+    - Resources/model-candidates.json
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kafworlddigital.vigil.m.ios
+        PRODUCT_NAME: Vigil
+        TARGETED_DEVICE_FAMILY: 1,2
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: true
+    info:
+      path: Config/VigilMacy-Info.plist
+      properties:
+        CFBundleDisplayName: Vigil
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations:
+        - UIInterfaceOrientationLandscapeLeft
+        - UIInterfaceOrientationLandscapeRight
+        NSLocalNetworkUsageDescription: Vigil pairs securely with your Mac on the
+          same Wi-Fi.
+        NSBonjourServices:
+        - _vigil-m._tcp
+        NSCameraUsageDescription: Scan your Mac's private Vigil pairing code.
+        NSMicrophoneUsageDescription: Hold to talk to start a focus session or park
+          an idea.
+        NSSpeechRecognitionUsageDescription: Vigil recognises your words on this device,
+          without uploading audio.
+        NSCalendarsFullAccessUsageDescription: Choose today's calendar events as focus
+          tasks. Vigil never changes your calendar.
+        VigilEdition: macy
+  VigilMacyMac:
+    type: application
+    platform: macOS
+    sources:
+    - App
+    - Core
+    - path: Shared
+      excludes:
+      - Fonts
+      - VoiceTurnBuffer.swift
+    - Resources/AppIcon.icns
+    - Resources/model-candidates.json
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kafworlddigital.vigil.m.mac
+        PRODUCT_NAME: Vigil
+        GENERATE_INFOPLIST_FILE: true
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_ENTITLEMENTS: Config/VigilMacyMac.entitlements
+    info:
+      path: Config/VigilMacyMac-Info.plist
+      properties:
+        CFBundleDisplayName: Vigil
+        CFBundleIconFile: AppIcon.icns
+        LSUIElement: true
+        NSPrincipalClass: NSApplication
+        NSMicrophoneUsageDescription: Hold to talk to start a focus session or park
+          an idea.
+        NSSpeechRecognitionUsageDescription: Vigil recognises speech on this Mac without
+          uploading audio.
+        NSCalendarsFullAccessUsageDescription: Choose today's events and receive a
+          ten-minute meeting heads-up. Vigil never changes your calendar.
+        NSLocalNetworkUsageDescription: Vigil pairs with your iPhone and iPad on the
+          same Wi-Fi.
+        NSBonjourServices:
+        - _vigil-m._tcp
+        VigilEdition: macy
+        LSApplicationCategoryType: public.app-category.productivity
 schemes:
   Vigil:
     build:
@@ -79,3 +175,11 @@ schemes:
     build:
       targets:
         VigilMac: all
+  VigilMacy:
+    build:
+      targets:
+        VigilMacy: all
+  VigilMacyMac:
+    build:
+      targets:
+        VigilMacyMac: all

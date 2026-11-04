@@ -9,15 +9,17 @@ permissions:
 jobs:
   verify:
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Generate native project
         run: |
           command -v xcodegen || brew install xcodegen
           xcodegen generate
-      - name: Render icon from original character
+      - name: Render icon v2 from native character
         run: python3 scripts/render_icon.py
+      - name: Verify approved icon
+        run: python3 scripts/check_icon.py
       - name: Unit tests
         run: swift test --jobs 2 2>&1 | tee unit-tests.log
       - name: Release simulator build
@@ -27,7 +29,7 @@ jobs:
       - name: Mac launch and live character proofs
         run: |
           codesign --force --deep --sign - build/mac/Build/Products/Release/Vigil.app
-          open -g build/mac/Build/Products/Release/Vigil.app --args --vigil-proof "$PWD/proofs" --vigil-renderer-fixture
+          open -g build/mac/Build/Products/Release/Vigil.app --args --vigil-proof "$PWD/proofs" --vigil-renderer-fixture --vigil-skip-intro
           sleep 15
           pgrep -f '/Vigil.app/Contents/MacOS/Vigil'
           python3 scripts/check_character_proofs.py proofs --allow-renderer-fixture
@@ -40,11 +42,29 @@ jobs:
           python3 scripts/check_frameworks.py build/device/Build/Products/Release-iphoneos/Vigil.app
       - name: iPhone and iPad Release launch proofs
         run: python3 scripts/prove_release.py build/simulator/Build/Products/Release-iphonesimulator/Vigil.app
+      - name: Macy iOS simulator Release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme VigilMacy -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/macy-simulator -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-simulator-build.log 2>&1
+      - name: Macy iOS device Release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme VigilMacy -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/macy-device -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-device-build.log 2>&1
+      - name: Macy Mac Release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme VigilMacyMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build/macy-mac -jobs 2 CODE_SIGNING_ALLOWED=NO build > macy-mac-build.log 2>&1
+      - name: Macy framework and runtime gates
+        run: |
+          python3 scripts/check_frameworks.py build/macy-device/Build/Products/Release-iphoneos/Vigil.app
+          python3 scripts/check_frameworks.py build/macy-mac/Build/Products/Release/Vigil.app
+          codesign --force --deep --sign - build/macy-mac/Build/Products/Release/Vigil.app
+          open -g -n build/macy-mac/Build/Products/Release/Vigil.app --args --vigil-skip-intro
+          sleep 15
+          pgrep -f '/build/macy-mac/Build/Products/Release/Vigil.app/Contents/MacOS/Vigil'
+          pkill -x Vigil || true
+          python3 scripts/prove_release.py build/macy-simulator/Build/Products/Release-iphonesimulator/Vigil.app Macy
       - name: Package installation files
         run: |
           mkdir -p delivery
           ditto -c -k --sequesterRsrc --keepParent build/mac/Build/Products/Release/Vigil.app delivery/Vigil-Mac.zip
           ditto -c -k --sequesterRsrc --keepParent build/device/Build/Products/Release-iphoneos/Vigil.app delivery/Vigil-iOS.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macy-mac/Build/Products/Release/Vigil.app delivery/Vigil-Macy-Mac.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macy-device/Build/Products/Release-iphoneos/Vigil.app delivery/Vigil-Macy-iOS.zip
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -55,3 +75,6 @@ jobs:
             proofs/
             *-build.log
             unit-tests.log
+            Resources/Vigil icon.png
+            Resources/AppIcon.icns
+            Resources/Assets.xcassets/AppIcon.appiconset/

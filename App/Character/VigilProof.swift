@@ -45,9 +45,14 @@ import QuartzCore
         DispatchQueue.main.asyncAfter(deadline:.now()+10){save(host.cursor.view,"Mac-cursor-buddy.png")}
         DispatchQueue.main.asyncAfter(deadline:.now()+11){
             if let data=try? JSONSerialization.data(withJSONObject:samples,options:.prettyPrinted){try? data.write(to:folder.appendingPathComponent("Mac-cursor-gaze.json"))}
-            let design=VigilIconView().frame(width:1024,height:1024)
-            let renderer=ImageRenderer(content:design);renderer.scale=1
-            if let image=renderer.nsImage,let tiff=image.tiffRepresentation,let rep=NSBitmapImageRep(data:tiff),let png=rep.representation(using:.png,properties:[:]){try? png.write(to:folder.appendingPathComponent("Vigil icon.png"))}
+            func render<V:View>(_ view:V,_ name:String) {
+                let renderer=ImageRenderer(content:view);renderer.scale=2
+                if let image=renderer.nsImage,let tiff=image.tiffRepresentation,let rep=NSBitmapImageRep(data:tiff),let png=rep.representation(using:.png,properties:[:]) {try? png.write(to:folder.appendingPathComponent(name))}
+            }
+            render(VigilHelpView().frame(width:680,height:1000),"Mac-help.png")
+            render(VigilIntroView{}.frame(width:520,height:440),"Mac-intro.png")
+            render(VigilSettingsView(state:VigilState(),changed:{_ in}).frame(width:620,height:900),"Mac-settings.png")
+            if let icon=Bundle.main.url(forResource:"AppIcon",withExtension:"icns"),let image=NSImage(contentsOf:icon),let tiff=image.tiffRepresentation,let rep=NSBitmapImageRep(data:tiff),let png=rep.representation(using:.png,properties:[:]) {try? png.write(to:folder.appendingPathComponent("Vigil icon.png"))}
             if let oldFrame{host.panel?.setFrame(oldFrame,display:true)}
             host.rendererFixtureGaze=nil
             host.setVisible(oldVisible);host.releaseMood()
@@ -55,17 +60,18 @@ import QuartzCore
         }
     }
 }
-// Uses the same upstream renderer and paths, composed over a full-bleed midnight glow.
+// Whole upstream blueberry, with 15% black side margins and an uncropped crown.
 struct VigilIconView:View {
     var body:some View {
         Canvas{ctx,size in
-            ctx.fill(Path(CGRect(origin:.zero,size:size)),with:.radialGradient(Gradient(colors:[Color(hex:0x344AC0),Color(hex:0x090E35)]),center:CGPoint(x:512,y:460),startRadius:40,endRadius:750))
+            ctx.fill(Path(CGRect(origin:.zero,size:size)),with:.color(.black))
             var face=FaceAnimator().step(1)
-            face.gaze = .zero;face.mood = .listening;face.closed=0;face.browLift=8;face.hop=0;face.blush=0.65
-            // The face is enlarged from the original landscape art, retaining round eyes and crown.
-            ctx.translateBy(x:0,y:230)
-            FaceView.draw(face,in:&ctx,size:CGSize(width:1024,height:474),transparent:true)
-            // Continue the body gradient down to the full-bleed edge, behind the lower crop.
+            face.gaze = .zero;face.mood = .listening;face.closed=0;face.browLift=8
+            face.hop=0;face.blush=0.65;face.breathe=0;face.lean=0;face.talk=0
+            let scale:CGFloat=1024*0.70/820
+            ctx.translateBy(x:(1024-844*scale)/2,y:176)
+            ctx.scaleBy(x:scale,y:scale)
+            FaceView.draw(face,in:&ctx,size:CGSize(width:844,height:390),transparent:true)
         }
     }
 }

@@ -33,7 +33,13 @@ for family in families:
  else:
   udid=subprocess.check_output(['xcrun','simctl','create','Vigil-'+family,device['deviceTypeIdentifier'],device['runtime']],text=True,timeout=60).strip()
  device=dict(device,udid=udid,state='Shutdown')
- if device['state']!='Booted':subprocess.run(['xcrun','simctl','boot',udid],check=True,timeout=120)
+ # A visible Simulator window keeps the display/compositor awake on hosted Macs.
+ tool=pathlib.Path(subprocess.check_output(['xcrun','--find','simctl'],text=True,timeout=30).strip())
+ simulator=tool.parents[2]/'Applications/Simulator.app'
+ subprocess.run(['open','-a',str(simulator),'--args','-CurrentDeviceUDID',udid],check=True,timeout=60)
+ boot=subprocess.run(['xcrun','simctl','boot',udid],capture_output=True,text=True,timeout=120)
+ if boot.returncode and not any(state in boot.stderr for state in ['current state: Booted','current state: Booting']):
+  raise subprocess.CalledProcessError(boot.returncode,boot.args,output=boot.stdout,stderr=boot.stderr)
  subprocess.run(['xcrun','simctl','bootstatus',udid,'-b'],check=True,timeout=600)
  # First-boot system services can remain busy after bootstatus completes.
  # Retry installation, then independently prove the launched PID survives.

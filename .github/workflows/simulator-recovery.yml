@@ -1,0 +1,112 @@
+name: Vigil simulator recovery with preserved builds
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        required: true
+        type: string
+      build_sha:
+        required: true
+        type: string
+      runner:
+        type: choice
+        default: macos-15
+        options: [macos-15, macos-26, macos-26-intel]
+permissions:
+  contents: read
+  actions: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  validate-build:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN: ${{ inputs.build_run }}
+      BUILD_SHA: ${{ inputs.build_sha }}
+      RUNNER_LABEL: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify successful compilation and unchanged application source
+        run: |
+          gh run view "$BUILD_RUN" --json headSha,jobs > compiled-run.json
+          python3 -c 'import json,os,re; d=json.load(open("compiled-run.json")); assert re.fullmatch("[0-9a-f]{40}",os.environ["BUILD_SHA"]); assert os.environ["BUILD_RUN"].isdigit(); assert os.environ["RUNNER_LABEL"] in ["macos-15","macos-26","macos-26-intel"]; assert d["headSha"]==os.environ["BUILD_SHA"]; assert any(j["name"]=="build" and j["conclusion"]=="success" for j in d["jobs"])'
+          git diff --exit-code "$BUILD_SHA" -- App Core Shared Config Resources project.yml Package.swift scripts/render_icon.py
+          python3 -c 'import json,os; json.dump({"compiledRun":os.environ["BUILD_RUN"],"compiledSource":os.environ["BUILD_SHA"],"proofSource":os.environ["GITHUB_SHA"],"applicationSourceIdentical":True},open("compiled-source.json","w"),indent=2)'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vigil-source-validation
+          retention-days: 3
+          path: |
+            compiled-source.json
+            compiled-run.json
+  simulator:
+    needs: validate-build
+    strategy:
+      fail-fast: false
+      matrix:
+        family: [iPhone, iPad]
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: ${{ inputs.runner == 'macos-15' && '/Applications/Xcode_26.2.app/Contents/Developer' || '/Applications/Xcode.app/Contents/Developer' }}
+      VIGIL_SIM_RUNTIME: iOS-26-2
+      VIGIL_SIM_FAMILY: ${{ matrix.family }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-build
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+          path: compiled
+      - name: Unpack the already-tested application builds
+        run: |
+          mkdir -p simulator-stage/Keith simulator-stage/Macy proofs
+          ditto -x -k compiled/simulator-input/Keith.zip simulator-stage/Keith
+          ditto -x -k compiled/simulator-input/Macy.zip simulator-stage/Macy
+          lipo simulator-stage/Keith/Vigil.app/Vigil -verify_arch "$(uname -m)"
+          lipo simulator-stage/Macy/Vigil.app/Vigil -verify_arch "$(uname -m)"
+      - name: Keith edition visible launch and screenshots
+        run: python3 -u scripts/prove_release.py simulator-stage/Keith/Vigil.app 2>&1 | tee proofs/${{ matrix.family }}-simulator.log
+      - name: Macy edition visible launch and screenshots
+        run: python3 -u scripts/prove_release.py simulator-stage/Macy/Vigil.app Macy 2>&1 | tee proofs/Macy-${{ matrix.family }}-simulator.log
+      - name: Stop only this test VM's app after the gates
+        if: always()
+        run: pkill -x Vigil || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Vigil-${{ matrix.family }}-proofs
+          retention-days: 3
+          path: proofs/
+  release-evidence:
+    needs: [validate-build, simulator]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-build
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+          path: combined
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-source-validation
+          path: combined
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-iPhone-proofs
+          path: combined/proofs
+      - uses: actions/download-artifact@v4
+        with:
+          name: Vigil-iPad-proofs
+          path: combined/proofs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vigil-release-evidence
+          retention-days: 3
+          path: combined/

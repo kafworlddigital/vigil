@@ -50,6 +50,14 @@ class BrainRouter:
             body.pop('max_tokens');body['think']=False;body['options']={'num_predict':256 if probe else 512}
         if m['provider']=='openrouter':body['provider']={'max_price':dict(prompt=0,completion=0,request=0,image=0)};body['reasoning']={'enabled':False}
         headers={'Authorization':'Bearer '+self.keys.get(m['provider'],''),'Content-Type':'application/json','User-Agent':'Vigil/1.0','x-opencode-session':self.session}
+        if m['provider']=='opencode-go':
+            # Match the verified OpenCode request. Credentials and account routing
+            # stay in the private store, never in source or request logs.
+            headers.update({'User-Agent':'opencode/1.19.3 ai-sdk/provider-utils/4.0.23 runtime/bun/1.3.14',
+                            'x-opencode-session-id':self.session,'x-opencode-request':'msg_'+secrets.token_hex(16),
+                            'x-opencode-client':'cli','x-opencode-project':'global'})
+            org=self.keys.get('_opencode-go-org-id')
+            if org:headers['x-opencode-org-id']=org
         req=urllib.request.Request(m['endpoint'],data=json.dumps(body).encode(),headers=headers)
         try:
             with urllib.request.urlopen(req,timeout=timeout) as response:
@@ -67,7 +75,7 @@ class BrainRouter:
                     try:reset=email.utils.parsedate_to_datetime(retry).timestamp()
                     except (ValueError,TypeError):reset=time.time()+1800
                 raise Failure('429' if e.code==429 else 'limit',reset) from None
-            raise Failure('auth' if e.code in [401,403] else 'http '+str(e.code),time.time()+(1800 if e.code in [401,402,403,404] else 60)) from None
+            raise Failure('auth' if e.code==401 else 'forbidden' if e.code==403 else 'http '+str(e.code),time.time()+(1800 if e.code in [401,402,403,404] else 60)) from None
         except (TimeoutError,urllib.error.URLError):raise Failure('timeout',time.time()+60) from None
     def record(self,m,started,error=None):
         state=self.initial(m);state.update(checkedAt=stamp(),latency=round(time.monotonic()-started,3),status='green')

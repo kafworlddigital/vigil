@@ -1,4 +1,5 @@
-import unittest,tempfile,time,json
+import unittest,tempfile,time,json,io,urllib.error
+from unittest.mock import patch
 from pathlib import Path
 from vigil_brain import BrainRouter,Failure,DeviceRegistry,digest,enrol_device
 
@@ -10,6 +11,27 @@ class BrainTests(unittest.TestCase):
  def setUp(self):
   self.models=[candidate('opencode-go','a'),candidate('openrouter','b:free'),candidate('nvidia','c')]
   self.keys={m['provider']:'synthetic' for m in self.models}
+ def test_go_request_matches_opencode_and_keeps_credentials_out_of_url(self):
+  m=candidate('opencode-go','glm-5.3-flash',False)
+  m['endpoint']='https://opencode.ai/inference/go/openai/v1/chat/completions'
+  router=BrainRouter([m],{'opencode-go':'synthetic-go','_opencode-go-org-id':'synthetic-org'})
+  with patch('vigil_brain.urllib.request.urlopen') as send:
+   send.return_value.__enter__.return_value=io.StringIO(json.dumps({'choices':[{'message':{'content':'ok'}}]}))
+   self.assertEqual(router.http(m,{'text':'synthetic'},5),'ok')
+   req=send.call_args.args[0];headers={k.lower():v for k,v in req.header_items()}
+   self.assertEqual(req.full_url,m['endpoint'])
+   self.assertEqual(headers['authorization'],'Bearer synthetic-go')
+   self.assertTrue(headers['user-agent'].startswith('opencode/'))
+   self.assertEqual(headers['x-opencode-org-id'],'synthetic-org')
+   self.assertEqual(headers['x-opencode-session'],headers['x-opencode-session-id'])
+   self.assertEqual(headers['x-opencode-client'],'cli')
+   self.assertTrue(headers['x-opencode-request'].startswith('msg_'))
+ def test_forbidden_response_does_not_claim_key_is_invalid(self):
+  router=BrainRouter(self.models,self.keys)
+  error=urllib.error.HTTPError(self.models[0]['endpoint'],403,'Forbidden',{},io.BytesIO(b'Cloudflare blocked request'))
+  with patch('vigil_brain.urllib.request.urlopen',side_effect=error):
+   with self.assertRaises(Failure) as caught:router.http(self.models[0],{'text':'synthetic'},5)
+   self.assertEqual(caught.exception.kind,'forbidden')
  def test_first_two_fail_third_answers(self):
   calls=[]
   def transport(m,prompt,timeout,probe=False):

@@ -1,0 +1,47 @@
+name: Vigil Mac Keychain recovery
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mac:
+    runs-on: macos-26-intel
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate project and approved icon
+        run: |
+          command -v xcodegen || brew install xcodegen
+          xcodegen generate
+          python3 scripts/render_icon.py
+          python3 scripts/check_icon.py
+      - name: Run tests
+        run: swift test --jobs 2 2>&1 | tee unit-tests.log
+      - name: Build the two Mac editions
+        run: |
+          set -euo pipefail
+          for item in 'VigilMac:mac' 'VigilMacyMac:macy-mac'; do
+            scheme="${item%%:*}"; folder="${item#*:}"
+            xcodebuild -project Vigil.xcodeproj -scheme "$scheme" -configuration Release -destination 'generic/platform=macOS' -derivedDataPath "build/$folder" -jobs 2 CODE_SIGNING_ALLOWED=NO build > "$folder-build.log" 2>&1
+            app="build/$folder/Build/Products/Release/Vigil.app"
+            lipo "$app/Contents/MacOS/Vigil" -verify_arch arm64
+            python3 scripts/check_frameworks.py "$app"
+            codesign --force --deep --sign - "$app"
+            open -g -n "$app" --args --vigil-proof "$PWD/proofs/$folder" --vigil-renderer-fixture --vigil-skip-intro
+            sleep 18
+            pgrep -f "/$app/Contents/MacOS/Vigil"
+            python3 scripts/check_character_proofs.py "$PWD/proofs/$folder" --allow-renderer-fixture
+            pkill -x Vigil || true
+            mkdir -p delivery
+            ditto -c -k --sequesterRsrc --keepParent "$app" "delivery/$folder.zip"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Vigil-Mac-recovery
+          retention-days: 3
+          path: |
+            delivery/
+            proofs/
+            unit-tests.log
+            *-build.log

@@ -26,23 +26,22 @@ enum KeyVault {
         guard status==errSecSuccess else { throw VaultError.saveFailed }
     }
     private static func base(_ service:String,_ account:String)->[String:Any] {
-        [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:(VigilEdition.macy && !service.contains(".vigil.m.") ? service.replacingOccurrences(of:"com.kafworlddigital.vigil.",with:"com.kafworlddigital.vigil.m."):service),kSecAttrAccount as String:account]
+        var query:[String:Any] = [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:(VigilEdition.macy && !service.contains(".vigil.m.") ? service.replacingOccurrences(of:"com.kafworlddigital.vigil.",with:"com.kafworlddigital.vigil.m."):service),kSecAttrAccount as String:account]
+        #if os(macOS)
+        // Use the modern per-app store. A damaged legacy login keychain can
+        // block SecItemCopyMatching on the main thread despite UI being disabled.
+        // Existing legacy records remain untouched; development provisioning
+        // imports the authorised connection into this separate store.
+        query[kSecUseDataProtectionKeychain as String] = true
+        #endif
+        return query
     }
     #if os(macOS)
     static func importTuckIfAvailable()->Bool {
         guard !VigilEdition.macy else { return false }
-        if read() != nil { return true }
-        for attribute in [kSecAttrLabel,kSecAttrAccount] {
-            let query:[String:Any]=[kSecClass as String:kSecClassGenericPassword,attribute as String:"Orca API Key",
-                kSecReturnData as String:true,kSecMatchLimit as String:kSecMatchLimitOne,
-                kSecUseAuthenticationUI as String:kSecUseAuthenticationUIFail]
-            var item:CFTypeRef?
-            if SecItemCopyMatching(query as CFDictionary,&item)==errSecSuccess,let data=item as? Data,
-               let value=String(data:data,encoding:.utf8),value.hasPrefix("sk-or-") {
-                do { try write(value); return true } catch { return false }
-            }
-        }
-        return false
+        // Optional legacy scans must never hold up the app's initial window.
+        // Authorised provisioning imports connections into the per-app store.
+        return read() != nil
     }
     #endif
     private enum VaultError:LocalizedError {

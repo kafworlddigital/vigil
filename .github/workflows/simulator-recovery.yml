@@ -11,7 +11,7 @@ on:
       runner:
         type: choice
         default: macos-15
-        options: [macos-15, macos-26, macos-26-intel]
+        options: [macos-15, macos-15-intel, macos-26, macos-26-intel]
 permissions:
   contents: read
   actions: read
@@ -33,7 +33,7 @@ jobs:
       - name: Verify successful compilation and unchanged application source
         run: |
           gh run view "$BUILD_RUN" --json headSha,jobs > compiled-run.json
-          python3 -c 'import json,os,re; d=json.load(open("compiled-run.json")); assert re.fullmatch("[0-9a-f]{40}",os.environ["BUILD_SHA"]); assert os.environ["BUILD_RUN"].isdigit(); assert os.environ["RUNNER_LABEL"] in ["macos-15","macos-26","macos-26-intel"]; assert d["headSha"]==os.environ["BUILD_SHA"]; assert any(j["name"]=="build" and j["conclusion"]=="success" for j in d["jobs"])'
+          python3 -c 'import json,os,re; d=json.load(open("compiled-run.json")); assert re.fullmatch("[0-9a-f]{40}",os.environ["BUILD_SHA"]); assert os.environ["BUILD_RUN"].isdigit(); assert os.environ["RUNNER_LABEL"] in ["macos-15","macos-15-intel","macos-26","macos-26-intel"]; assert d["headSha"]==os.environ["BUILD_SHA"]; assert any(j["name"]=="build" and j["conclusion"]=="success" for j in d["jobs"])'
           git diff --exit-code "$BUILD_SHA" -- App Core Shared Config Resources project.yml Package.swift scripts/render_icon.py
           python3 -c 'import json,os; json.dump({"compiledRun":os.environ["BUILD_RUN"],"compiledSource":os.environ["BUILD_SHA"],"proofSource":os.environ["GITHUB_SHA"],"applicationSourceIdentical":True},open("compiled-source.json","w"),indent=2)'
       - uses: actions/upload-artifact@v4
@@ -52,7 +52,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 30
     env:
-      DEVELOPER_DIR: ${{ inputs.runner == 'macos-15' && '/Applications/Xcode_26.2.app/Contents/Developer' || '/Applications/Xcode.app/Contents/Developer' }}
+      DEVELOPER_DIR: ${{ startsWith(inputs.runner, 'macos-15') && '/Applications/Xcode_26.2.app/Contents/Developer' || '/Applications/Xcode.app/Contents/Developer' }}
       VIGIL_SIM_RUNTIME: iOS-26-2
       VIGIL_SIM_FAMILY: ${{ matrix.family }}
     steps:

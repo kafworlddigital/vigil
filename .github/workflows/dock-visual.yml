@@ -13,7 +13,7 @@ permissions:
   actions: read
 jobs:
   dock:
-    runs-on: macos-26-intel
+    runs-on: macos-15-intel
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}

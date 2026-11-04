@@ -29,7 +29,7 @@ import CoreImage.CIFilterBuiltins
             SettingsLink()
             Divider();Button("Quit Vigil"){NSApplication.shared.terminate(nil)}
         }
-        Settings { VigilSettingsView(state:engine.state,changed:engine.updateSettings).frame(width:460).padding() }
+        SwiftUI.Settings { VigilSettingsView(state:engine.state,changed:engine.updateSettings).frame(width:460).padding() }
     }
     #else
     var body:some Scene { WindowGroup{PhoneRoot()} }

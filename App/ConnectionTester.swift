@@ -29,6 +29,7 @@ enum ConnectionTester {
                     body=["model":model,"messages":[["role":"user","content":"Reply OK."]],"max_tokens":192]
                 }
                 var request=URLRequest(url:URL(string:endpoint)!);request.httpMethod="POST";request.timeoutInterval=35
+                request.setValue("Vigil/1.0",forHTTPHeaderField:"User-Agent")
                 request.setValue("Bearer "+key,forHTTPHeaderField:"Authorization");request.setValue("application/json",forHTTPHeaderField:"Content-Type")
                 request.httpBody=try JSONSerialization.data(withJSONObject:body)
                 let (data,response)=try await URLTransport().data(for:request)
@@ -37,7 +38,7 @@ enum ConnectionTester {
                 let message=choices?.first?["message"] as? [String:Any]
                 let text=message?["content"] as? String ?? ""
                 let ok=response.statusCode==200 && !text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty
-                let detail=ok ? "Answered · free" : provider == "OpenCode" && response.statusCode==403 ? "Free models require the official OpenCode client." : "HTTP \(response.statusCode) · no answer. Try again later."
+                let detail=ok ? "Answered · free" : provider == "OpenCode" && response.statusCode==429 ? "Free usage limit reached. No paid call made." : provider == "OpenCode" && response.statusCode==403 ? "Free models require the official OpenCode client." : "HTTP \(response.statusCode) · no answer. Try again later."
                 result.append(ConnectionResult(provider:provider,model:model,ok:ok,detail:detail))
             }catch{result.append(ConnectionResult(provider:provider,model:"Free model",ok:false,detail:"Connection unavailable. Your key has not been changed."))}
         }

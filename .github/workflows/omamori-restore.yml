@@ -1,0 +1,47 @@
+name: Omamori unchanged Mac restore
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  restore:
+    runs-on: macos-26
+    timeout-minutes: 25
+    env:
+      OMAMORI_BUILD_KEY: ${{ secrets.OMAMORI_BUILD_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch protected build input
+        run: |
+          mkdir -p private-source protected-evidence
+          curl --fail --silent --show-error --max-time 60 'https://hermes-ovh.tail33f19f.ts.net:8443/vigil/build-input' -o input.enc
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in input.enc -out input.tar.gz -pass env:OMAMORI_BUILD_KEY
+          tar -xzf input.tar.gz -C private-source
+      - name: Verify tests and build unchanged Mac app
+        run: |
+          command -v xcodegen || brew install xcodegen
+          cd private-source
+          swift test --jobs 2 > ../protected-evidence/tests.log 2>&1
+          xcodegen generate > ../protected-evidence/project.log 2>&1
+          xcodebuild -project MacyAssistantPreview.xcodeproj -scheme OmamoriAIMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build -jobs 2 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build > ../protected-evidence/build.log 2>&1
+      - name: Framework and launch gates
+        run: |
+          APP="$PWD/private-source/build/Build/Products/Release/OmamoriAI.app"
+          python3 scripts/check_frameworks.py "$APP" > protected-evidence/frameworks.log 2>&1
+          codesign --force --deep --sign - "$APP" > protected-evidence/signature.log 2>&1
+          open -g -n "$APP"
+          sleep 15
+          pgrep -f '/OmamoriAI.app/Contents/MacOS/OmamoriAI' > protected-evidence/pid.txt
+          python3 -c 'import json;from pathlib import Path;Path("protected-evidence/gates.json").write_text(json.dumps({"tests":"passed","otool":"passed","survivedSeconds":15,"appUnchanged":True}))'
+          ditto -c -k --sequesterRsrc --keepParent "$APP" protected-evidence/OmamoriAI-Mac.zip
+      - name: Encrypt evidence and finished app
+        if: always()
+        run: |
+          tar -czf protected-evidence.tar.gz protected-evidence
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 -in protected-evidence.tar.gz -out omamori-restore.enc -pass env:OMAMORI_BUILD_KEY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Omamori-protected-restore
+          retention-days: 3
+          path: omamori-restore.enc

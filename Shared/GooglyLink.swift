@@ -5,7 +5,7 @@ import CryptoKit
 /// Everything the Mac and the iPhone agree on: the Bonjour service name,
 /// what a "face update" looks like, and how lines of JSON travel over TCP.
 public enum GooglyService {
-    public static let type = "_googly._tcp"
+    public static let type = "_vigil._tcp"
 }
 
 public enum Mood: String, Codable, CaseIterable, Sendable {

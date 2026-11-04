@@ -1,7 +1,7 @@
 import Foundation
 
 public enum FocusActivity: String, Codable, Sendable {
-    case onTask = "on_task", offTask = "off_task", uncertain, unavailable, paused
+    case onTask = "on_task", offTask = "off_task", uncertain, unavailable, paused, privateSkipped = "private (skipped)"
 }
 
 public struct FocusCheck: Codable, Identifiable, Equatable, Sendable {
@@ -41,7 +41,7 @@ public struct FocusSession: Codable, Identifiable, Equatable, Sendable {
     public var startedAt = Date()
     public var elapsed: Double = 0
     public var status: Status = .running
-    public var detail = "First check in 30 seconds"
+    public var detail = "First check in 60 seconds"
     public var checks: [FocusCheck] = []
     // Optional fields preserve decoding of existing session history.
     public var developerMode: Bool?
@@ -49,7 +49,8 @@ public struct FocusSession: Codable, Identifiable, Equatable, Sendable {
     public var realElapsed: Double?
     public var isDeveloperMode: Bool { developerMode == true }
     public var clockRate: Double { isDeveloperMode ? 4 : 1 }
-    public var checkInterval: Double { isDeveloperMode ? 10 : 30 } // real seconds
+    public var configuredInterval: Double?
+    public var checkInterval: Double { min(120, max(30, configuredInterval ?? 60)) } // real seconds
     public var observationDuration: Double { checkInterval * clockRate }
     public var realActiveElapsed: Double { realElapsed ?? elapsed }
     public var remaining: Double { max(0, duration - elapsed) }
@@ -128,35 +129,27 @@ public struct FocusNudgePolicy {
     }
 }
 
-public struct FocusDecision: Equatable {
+public struct FocusDecision: Equatable, Sendable {
     public let activity: FocusActivity
     public let probability: Double
     public let confidence: Double
     public let probabilities: [String: Double]
-    public enum DecodeError: LocalizedError {
-        case invalidAnswer
-        public var errorDescription: String? { "Decisions returned an unsupported or malformed answer. This check was skipped." }
-    }
-    /// The Decisions choice contract has no explanation or coordinates.
+    public static let uncertain = FocusDecision(activity: .uncertain, probability: 0, confidence: 1, probabilities: ["on_task":0,"off_task":0,"uncertain":1])
+    public enum DecodeError: Error { case invalidAnswer }
     public static func decode(_ data: Data) throws -> FocusDecision {
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let answers = json["answers"] as? [[String: Any]],
-              let a = answers.first(where: { $0["name"] as? String == "activity" }),
-              a["type"] as? String == "choice",
-              let value = a["choice"] as? String, let activity = FocusActivity(rawValue: value),
-              [.onTask, .offTask, .uncertain].contains(activity),
-              let confidence = a["confidence"] as? Double, confidence.isFinite, (0...1).contains(confidence),
-              let ps = a["probabilities"] as? [[String: Any]], ps.count == 3 else { throw DecodeError.invalidAnswer }
-        var values: [String: Double] = [:]
-        for p in ps {
-            guard let v = p["value"] as? String, ["on_task", "off_task", "uncertain"].contains(v),
-                  values[v] == nil, let n = p["probability"] as? Double, n.isFinite, (0...1).contains(n) else {
-                throw DecodeError.invalidAnswer
-            }
-            values[v] = n
+        guard let json = try JSONSerialization.jsonObject(with:data) as? [String:Any],
+              Set(json.keys) == Set(["choice","p_on","p_off","p_uncertain"]),
+              let raw=json["choice"] as? String,let activity=FocusActivity(rawValue:raw),
+              [.onTask,.offTask,.uncertain].contains(activity) else { throw DecodeError.invalidAnswer }
+        func number(_ key:String) throws -> Double {
+            guard let value=json[key] as? NSNumber, String(cString:value.objCType) != "c", value.doubleValue.isFinite,
+                  (0...1).contains(value.doubleValue) else { throw DecodeError.invalidAnswer }
+            return value.doubleValue
         }
-        guard abs(values.values.reduce(0, +) - 1) < 0.02,
-              let off = values["off_task"] else { throw DecodeError.invalidAnswer }
-        return FocusDecision(activity: activity, probability: off, confidence: confidence, probabilities: values)
+        let on=try number("p_on"),off=try number("p_off"),unsure=try number("p_uncertain")
+        let values=["on_task":on,"off_task":off,"uncertain":unsure]
+        guard abs(on+off+unsure-1) < 0.02, let chosen=values[raw],chosen>=max(on,off,unsure) else { throw DecodeError.invalidAnswer }
+        return FocusDecision(activity:activity,probability:off,confidence:chosen,probabilities:values)
     }
+    public static func parseOrUncertain(_ data:Data) -> FocusDecision { (try? decode(data)) ?? .uncertain }
 }

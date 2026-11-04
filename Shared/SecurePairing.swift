@@ -9,9 +9,9 @@ public struct PairingRecord: Codable, Equatable {
     public var key: Data? { Data(base64Encoded: secret).flatMap { $0.count == 32 ? $0 : nil } }
     /// Public fingerprint for discovery; the secret still authenticates the transport.
     public var identifier: String { key.map { SHA256.hash(data: $0).prefix(12).map { String(format: "%02x", $0) }.joined() } ?? "invalid" }
-    public var qrText: String { "bluey-pair:" + ((try? JSONEncoder().encode(self)).map { $0.base64EncodedString() } ?? "") }
+    public var qrText: String { "vigil-pair:" + ((try? JSONEncoder().encode(self)).map { $0.base64EncodedString() } ?? "") }
     public static func parse(_ text: String) -> PairingRecord? {
-        guard text.hasPrefix("bluey-pair:"), text.count < 2048,
+        guard text.hasPrefix("vigil-pair:"), text.count < 2048,
               let data = Data(base64Encoded: String(text.dropFirst(11))),
               let record = try? JSONDecoder().decode(Self.self, from: data), record.version == 1,
               record.key != nil, !record.service.isEmpty else { return nil }
@@ -30,16 +30,16 @@ public struct SecureChannel {
     public init(secret: Data, challenge: Data, server: Bool) {
         func key(_ direction: String) -> SymmetricKey {
             HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: secret), salt: challenge,
-                info: Data(("bluey-v1-" + direction).utf8), outputByteCount: 32)
+                info: Data(("vigil-v1-" + direction).utf8), outputByteCount: 32)
         }
         sendKey = key(server ? "mac-to-phone" : "phone-to-mac")
         receiveKey = key(server ? "phone-to-mac" : "mac-to-phone")
     }
     public static func proof(secret: Data, challenge: Data) -> Data {
-        Data(HMAC<SHA256>.authenticationCode(for: Data("bluey-pair-v1".utf8) + challenge, using: SymmetricKey(data: secret)))
+        Data(HMAC<SHA256>.authenticationCode(for: Data("vigil-pair-v1".utf8) + challenge, using: SymmetricKey(data: secret)))
     }
     public static func verifies(_ proof: Data, secret: Data, challenge: Data) -> Bool {
-        HMAC<SHA256>.isValidAuthenticationCode(proof, authenticating: Data("bluey-pair-v1".utf8) + challenge,
+        HMAC<SHA256>.isValidAuthenticationCode(proof, authenticating: Data("vigil-pair-v1".utf8) + challenge,
                                               using: SymmetricKey(data: secret))
     }
     public mutating func seal(_ packet: Packet) throws -> Data {

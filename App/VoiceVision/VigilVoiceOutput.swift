@@ -17,14 +17,14 @@ import UIKit
     static var voices: [AVSpeechSynthesisVoice] {
         AVSpeechSynthesisVoice.speechVoices().sorted { ($0.language, $0.name) < ($1.language, $1.name) }
     }
-    func speak(_ text: String) {
+    func speak(_ text: String, entireLine: Bool = false) {
         guard enabled, !VoiceVisionController.proofMode else { return }
         stop()
         #if os(iOS)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
         #endif
-        let line = AVSpeechUtterance(string: VoiceVisionPolicy.sentence(text))
+        let line = AVSpeechUtterance(string: entireLine ? String(text.prefix(300)) : VoiceVisionPolicy.sentence(text))
         let identifier = UserDefaults.standard.string(forKey: "vigil.voice.identifier") ?? ""
         line.voice = AVSpeechSynthesisVoice(identifier: identifier) ?? AVSpeechSynthesisVoice(language: "en-GB")
         line.volume = VoiceVisionPolicy.volume(UserDefaults.standard.object(forKey: "vigil.voice.volume") as? Double ?? 0.5)

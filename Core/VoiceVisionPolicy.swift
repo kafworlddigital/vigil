@@ -17,6 +17,8 @@ public enum VigilNudgeStyle: String, CaseIterable, Codable {
 public enum VigilVoiceCommand: Equatable, Sendable {
     case whatIsThis(String)
     case lookAtMe(String)
+    case stuck(String)
+    case remind(minutes: Int, text: String)
 
     public static func parse(_ transcript: String) -> Self? {
         let words = transcript.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
@@ -27,6 +29,23 @@ public enum VigilVoiceCommand: Equatable, Sendable {
         }
         if rest.starts(with: ["look", "at", "me"]) {
             return .lookAtMe(rest.dropFirst(3).joined(separator: " "))
+        }
+        if rest.starts(with: ["i", "m", "stuck"]) || rest.starts(with: ["im", "stuck"]) || rest.starts(with: ["i", "am", "stuck"]) {
+            return .stuck("")
+        }
+        if rest.starts(with: ["remind", "me", "in"]),
+           transcript.range(of: #"\bin\s*[-−]|\bin\s*\d+[.,]\d+"#, options: [.regularExpression, .caseInsensitive]) != nil { return nil }
+        if rest.starts(with: ["remind", "me", "in"]), let unit = rest.firstIndex(where: { $0 == "minute" || $0 == "minutes" }) {
+            let number = Array(rest[3..<unit])
+            let small = ["one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,"ten":10,"eleven":11,"twelve":12,"thirteen":13,"fourteen":14,"fifteen":15,"sixteen":16,"seventeen":17,"eighteen":18,"nineteen":19,"twenty":20,"thirty":30,"forty":40,"fifty":50,"sixty":60]
+            let minutes: Int?
+            if number.count == 1 { minutes = Int(number[0]) ?? small[number[0]] }
+            else if number.count == 2, let tens = small[number[0]], tens >= 20, tens.isMultiple(of: 10), let ones = small[number[1]], ones < 10 { minutes = tens + ones }
+            else { minutes = nil }
+            guard let minutes, (1...1440).contains(minutes) else { return nil }
+            var text = Array(rest.dropFirst(unit + 1))
+            if text.first == "to" { text.removeFirst() }
+            return .remind(minutes: minutes, text: String(text.joined(separator: " ").prefix(300)))
         }
         return nil
     }

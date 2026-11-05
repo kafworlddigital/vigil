@@ -193,6 +193,9 @@ enum VigilPointing {
         if let text=encodedState() { reply(Packet(command:"focusState",callID:packet.callID,text:text)) }
     }
     func sync() {
+        #if VIGIL_VOICE_VISION
+        VigilSupportController.shared.currentTask = state.session?.status == .ended ? "" : state.session?.task ?? ""
+        #endif
         state.settings=settings;state.revision += 1;state.sentAt=Date()
         if let data=try? JSONEncoder().encode(state) {
             try? data.write(to:file,options:.atomic)
@@ -220,11 +223,16 @@ enum VigilPointing {
         let console=CGSessionCopyCurrentDictionary() as? [String:Any]
         if console?["CGSSessionScreenIsLocked"] as? Bool == true || console?["kCGSessionOnConsoleKey"] as? Bool == false { pause();return }
         state.session?.advance(max(0,delta))
-        if let meeting=nextMeeting,milestones.meetingDue(id:meeting.id,start:meeting.start,now:Date()) {
+        #if VIGIL_VOICE_VISION
+        let useLegacySupport = false
+        #else
+        let useLegacySupport = true
+        #endif
+        if useLegacySupport, let meeting=nextMeeting,milestones.meetingDue(id:meeting.id,start:meeting.start,now:Date()) {
             end();state.notice="Your next meeting is in \(max(1,Int(ceil(meeting.start.timeIntervalSinceNow/60)))) minutes. A good place to stop."
             notify(state.notice);sync();return
         }
-        if milestones.advance(delta) {
+        if useLegacySupport && milestones.advance(delta) {
             state.notice="A little stretch and a glass of water? Your task will wait."
             notify(state.notice)
         }

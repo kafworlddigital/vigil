@@ -117,7 +117,11 @@ class BrainRouter:
         with self.lock:byid={self.id(m):m for m in self.models};ranked=self.snapshot()
         for state in ranked:
             m=byid[state['id']]
-            if prompt.get('purpose')=='question' and m['provider']=='openrouter' and not m['model'].endswith(':free'):continue
+            if prompt.get('purpose')=='question':
+                free=(m['provider'] in ['nvidia','ollama-cloud'] or
+                      (m['provider']=='openrouter' and m['model'].endswith(':free')) or
+                      (m['provider']=='opencode' and m['model'].endswith('-free')))
+                if not free:continue
             if m['provider'] in blocked or not self.keys.get(m['provider']) or self.reset(state)>time.time() or (prompt.get('image') and not m['vision']):continue
             if deadline-time.monotonic()<1:break
             started=time.monotonic()

@@ -23,6 +23,7 @@ struct VigilAnswerBubble: View {
 struct VigilVoiceBar: View {
     @ObservedObject private var controller = VoiceVisionController.shared
     @ObservedObject private var wake = VoiceVisionController.shared.wake
+    @State private var typedCommand = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -36,12 +37,22 @@ struct VigilVoiceBar: View {
                 Button("What is this?") { controller.ask(.whatIsThis("")) }
                 #endif
                 Button("Look at me") { controller.ask(.lookAtMe("")) }
+                Button("I’m stuck") { controller.ask(.stuck("")) }
                 Button("Introduction") { controller.showIntroduction = true }
             }.disabled(controller.busy)
+            HStack {
+                TextField("Vigil, remind me in 10 minutes to…", text: $typedCommand).textFieldStyle(.roundedBorder)
+                    .onSubmit { sendCommand() }
+                Button("Ask") { sendCommand() }.disabled(typedCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.busy)
+            }
             #if os(iOS)
             if controller.busy || !controller.answer.isEmpty || !controller.status.isEmpty { VigilAnswerBubble() }
             #endif
         }
+    }
+    private func sendCommand() {
+        if let command = VigilVoiceCommand.parse(typedCommand) { controller.ask(command); typedCommand = "" }
+        else { controller.announce("Try ‘Vigil, I’m stuck’ or ‘Vigil, remind me in 10 minutes to stretch’.", speak: false) }
     }
 }
 
@@ -92,6 +103,7 @@ struct VigilFeatureSettings: View {
             Text(keepClips ? "Clips stay locally in Vigil's Application Support / Requested clips folder. Turning this off leaves previously saved clips in place." : "Temporary clips are removed after the answer, cancellation or an error. Saving is off.").font(.caption).foregroundStyle(.secondary)
             Text("Answers bring a small sparkle and a light haptic tap on supported hardware. Reduce Motion replaces motion with a quiet glow.").font(.caption).foregroundStyle(.secondary)
             Button("Feature introduction and permissions") { controller.showIntroduction = true }
+            VigilSupportSettings()
             VigilVoiceBar()
         }
     }
@@ -101,14 +113,19 @@ struct VigilFeatureIntroduction: View {
     @ObservedObject private var controller = VoiceVisionController.shared
     @State private var page = 0
     @State private var requesting = false
-    init(initialPage: Int = 0) { _page = State(initialValue: min(5, max(0, initialPage))) }
+    init(initialPage: Int = 0) { _page = State(initialValue: min(Self.cards.count - 1, max(0, initialPage))) }
     static let cards: [(String, String, String)] = [
         ("Choose your nudge", "bell.badge", "Pick a chime, a little bounce, a colour flash, an eye wiggle or a spoken line. Try each in Settings. Motion stays around Vigil's face."),
         ("A few quiet words", "speaker.wave.2", "‘Back to it.’ ‘Focus.’ ‘One thing.’ Choose a free Apple voice and volume, or switch speech off in Settings."),
         ("Vigil, what is this?", "cursorarrow.rays", "On Mac, point at something and ask. Vigil reads Accessibility text first, or sends a small cursor crop. You hear one sentence and see a bubble by the face. Other apps stay private on iPhone and iPad."),
         ("A small celebration", "sparkles", "A short sparkle around the face and a light haptic tap mark an answer. Haptics depend on your hardware; Reduce Motion uses a gentle glow."),
-        ("Vigil, look at me", "camera", "Only your request starts the camera. A visible indicator stays on during the four-second video and audio clip. Ask your question while it records. Only three small frames and locally recognised words are sent. The temporary clip is removed after the answer unless you enable saving."),
-        ("You're in control", "hand.raised", "Microphone and Speech Recognition let Vigil hear its name on-device. On Mac, Accessibility reads the pointed item and Screen Recording allows a small crop. Camera permission is requested only when you ask to record. Wake listening is visible and can be stopped at any time. Free or included non-OpenAI models fail over automatically; providers have their own data policies.")
+        ("Vigil, look at me", "camera", "Only your request starts a video clip. A visible indicator stays on during the four-second video and audio clip. Ask your question while it records. Only three small frames and locally recognised words are sent. The temporary clip is removed after the answer unless you enable saving."),
+        ("Vigil, I’m stuck", "arrow.right.circle", "Say or type ‘Vigil, I’m stuck’ for one small next step on your current focus task. Free non-OpenAI models fail over automatically; a simple local step is always available. Switch it off in Settings."),
+        ("Remind me in a few minutes", "timer", "Say or type ‘Vigil, remind me in 10 minutes to send the draft’. Vigil saves the reminder locally, nudges and speaks when due while open. Background or closed apps use an Apple notification; speech needs Vigil running. Manage or cancel reminders in Settings."),
+        ("Meeting in 5 minutes", "calendar", "Enable meeting warnings in Settings and allow Calendar once. Vigil reads meeting titles locally and gives a five-minute heads-up. No calendar information goes to a model; no events are changed."),
+        ("A little break", "figure.stand", "After 50 minutes of continuous work, hear ‘Stand up. Drink water.’ Change the interval or turn it off in Settings. An idle period or sleep resets the clock. This is a work timer, not a sitting sensor."),
+        ("A private tired check", "eye", "Off by default. Enable it and confirm your camera cover is open for this run. Every five minutes, one frame is checked by Apple Vision on-device for eyes, mouth and posture cues. No image is saved or uploaded. Cover closed, darkness, cancellation or backgrounding skips the check; there is no reliable hardware cover sensor. These cues are fallible, not a health assessment."),
+        ("You're in control", "hand.raised", "Microphone and Speech Recognition let Vigil hear its name on-device. On Mac, Accessibility reads the pointed item and Screen Recording allows a small crop. Camera permission is requested only when you ask to record or explicitly enable tired checks with the cover open. Wake listening is visible and can be stopped at any time. Free non-OpenAI models fail over automatically; providers have their own data policies.")
     ]
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {

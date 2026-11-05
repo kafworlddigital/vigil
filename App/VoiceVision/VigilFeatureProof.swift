@@ -32,7 +32,7 @@ import SwiftUI
                 controller.status = "Recording · 4 seconds · ask your question now"
                 try render(VigilNativeFeatureCard(title: "Look at me", detail: "Indicator fixture · camera and microphone are OFF in this preview").frame(width: 640, height: 440), "camera-indicator")
                 controller.recording = false; controller.busy = false; controller.answer = ""; controller.status = ""
-                for page in 0..<6 {
+                for page in VigilFeatureIntroduction.cards.indices {
                     try render(VigilFeatureIntroduction(initialPage: page).frame(width: 640, height: 480), "onboarding-" + String(page + 1))
                 }
                 let receipt: [String: Any] = ["kind": "native SwiftUI cloud preview with synthetic answer fixtures", "cameraCaptured": false, "speechPlayed": false,

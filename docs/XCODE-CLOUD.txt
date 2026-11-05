@@ -1,0 +1,28 @@
+Vigil Keith edition — Xcode Cloud handover
+
+Branch: features-voice-vision. Includes the Tuck key fix and ten companion features.
+Vigil.xcodeproj and its shared schemes are checked in. No XcodeGen install is needed.
+ci_scripts runs edition/privacy guards and core regression tests before native builds.
+
+Initial enrolment is blocked, not complete. Apple's public ciProducts resource has no
+create operation. The authenticated account currently has no Vigil product and no
+com.kafworlddigital.vigil.mac / com.kafworlddigital.vigil.ios app records. The existing
+Macy records are a different edition and must not be reused.
+
+One-time setup requires Xcode's first-workflow assistant for each Keith bundle ID,
+repository access restricted to kafworlddigital/vigil, and the Keith app records.
+Use only the included free compute plan. Do not buy or upgrade a subscription.
+Set the next cloud build number above 8 before releasing. No automatic schedule.
+
+Create separate manual workflows: Keith Mac (VigilMac, macOS archive) and Keith iOS
+(Vigil, iOS archive). Branch: features-voice-vision. No Macy actions or distributions.
+After enrolment, Apple's ciWorkflows / ciBuildRuns APIs can configure and start builds,
+read actions/issues and download artifacts. The private task record has API discovery
+evidence and a bounded continuation helper. Native builds and physical acceptance
+remain separate from Linux tests or syntax checks.
+
+GitHub Actions refused dispatch HTTP 422 although enabled=true and workflow active.
+The repository was already public; its visibility was not changed. Billing reported
+zero net November Actions usage. The accessible APIs do not disclose the enforcement
+reason or personal budget, so exhausted minutes are not a confirmed explanation.
+Do not change billing, security or repository visibility to work around this.

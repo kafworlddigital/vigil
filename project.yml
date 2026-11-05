@@ -8,7 +8,7 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     MARKETING_VERSION: '1.0'
-    CURRENT_PROJECT_VERSION: '7'
+    CURRENT_PROJECT_VERSION: '8'
     DEVELOPMENT_TEAM: V892V3PC6T
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: true
@@ -46,7 +46,7 @@ targets:
         NSLocalNetworkUsageDescription: Vigil pairs securely with your Mac on the same Wi-Fi.
         NSBonjourServices:
         - _vigil._tcp
-        NSCameraUsageDescription: Only when you ask, Vigil records a four-second clip to answer your question;
+        NSCameraUsageDescription: On request, Vigil records a four-second question clip. Optional tired checks use one unsaved on-device frame only with your cover-open confirmation;
           on iPhone and iPad it also scans pairing codes.
         NSMicrophoneUsageDescription: Listen for Vigil on this device and record audio only for your requested
           four-second camera clip.
@@ -85,12 +85,12 @@ targets:
           four-second camera clip.
         NSSpeechRecognitionUsageDescription: Vigil recognises its name and your words on this device;
           speech audio is never uploaded.
-        NSCalendarsFullAccessUsageDescription: Choose today's events and receive a ten-minute meeting
-          heads-up. Vigil never changes your calendar.
+        NSCalendarsFullAccessUsageDescription: Read meeting titles locally and give a five-minute meeting
+          warning. Vigil never changes your calendar.
         NSLocalNetworkUsageDescription: Vigil pairs with your iPhone and iPad on the same Wi-Fi.
         NSBonjourServices:
         - _vigil._tcp
-        NSCameraUsageDescription: Only when you ask, Vigil records a four-second clip to answer your question;
+        NSCameraUsageDescription: On request, Vigil records a four-second question clip. Optional tired checks use one unsaved on-device frame only with your cover-open confirmation;
           on iPhone and iPad it also scans pairing codes.
   VigilMacy:
     type: application
@@ -162,8 +162,8 @@ targets:
         NSPrincipalClass: NSApplication
         NSMicrophoneUsageDescription: Hold to talk to start a focus session or park an idea.
         NSSpeechRecognitionUsageDescription: Vigil recognises speech on this Mac without uploading audio.
-        NSCalendarsFullAccessUsageDescription: Choose today's events and receive a ten-minute meeting
-          heads-up. Vigil never changes your calendar.
+        NSCalendarsFullAccessUsageDescription: Read meeting titles locally and give a five-minute meeting
+          warning. Vigil never changes your calendar.
         NSLocalNetworkUsageDescription: Vigil pairs with your iPhone and iPad on the same Wi-Fi.
         NSBonjourServices:
         - _vigil-m._tcp

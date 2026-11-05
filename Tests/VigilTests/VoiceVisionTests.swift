@@ -59,6 +59,16 @@ final class VoiceVisionTests: XCTestCase {
         catch { XCTAssertEqual(error as? RouterError, .privateScreen) }
         let calls = await transport.calls; XCTAssertTrue(calls.isEmpty)
     }
+    func testQuestionsNeverUseSubscriptionGoOrPaidModels() async throws {
+        let transport = QuestionTransport()
+        let go = ModelCandidate(provider: "opencode-go", model: "glm-free-looking", vision: true, endpoint: "https://opencode.ai/inference/go/openai/v1/chat/completions")
+        let zenPaid = ModelCandidate(provider: "opencode", model: "paid", vision: true, endpoint: "https://opencode.ai/zen/v1/chat/completions")
+        let free = ModelCandidate(provider: "openrouter", model: "vendor/model:free", vision: true, endpoint: "https://openrouter.ai/api/v1/chat/completions")
+        let router = ModelHealthRouter(candidates: [go, zenPaid, free], keys: ["opencode-go": "synthetic", "opencode": "synthetic", "openrouter": "synthetic"], transport: transport)
+        let reply = try await router.complete(ModelPrompt(text: "One step for a synthetic task", purpose: .question))
+        XCTAssertEqual(reply.provider, "openrouter")
+        let calls = await transport.calls; XCTAssertEqual(calls, ["vendor/model:free"])
+    }
 }
 
 private actor QuestionTransport: HTTPTransport {

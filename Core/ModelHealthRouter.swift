@@ -21,6 +21,14 @@ public struct ModelCandidate: Codable, Sendable, Equatable, Identifiable {
         let hosts=["opencode-go":"opencode.ai","opencode":"opencode.ai","openrouter":"openrouter.ai","nvidia":"integrate.api.nvidia.com","ollama-cloud":"ollama.com"]
         return hosts[provider]==url.host && !(provider=="openrouter" && lower.hasPrefix("openrouter/"))
     }
+    public var freeForQuestions: Bool {
+        switch provider {
+        case "nvidia", "ollama-cloud": return permitted
+        case "openrouter": return permitted && model.hasSuffix(":free")
+        case "opencode": return permitted && model.hasSuffix("-free")
+        default: return false
+        }
+    }
 }
 public struct ModelHealth: Codable, Sendable, Identifiable {
     public var id: String
@@ -126,7 +134,7 @@ public actor ModelHealthRouter {
         let deadline=prompt.purpose == .question ? now.addingTimeInterval(45) : Date.distantFuture
         let ordered=snapshot().compactMap { state -> ModelCandidate? in
             guard !state.resting(now),let candidate=candidates.first(where:{$0.id==state.id}),(!prompt.screen || candidate.vision),!(keys[candidate.provider] ?? "").isEmpty else { return nil }
-            if prompt.purpose == .question && candidate.provider == "openrouter" && !candidate.model.hasSuffix(":free") { return nil }
+            if prompt.purpose == .question && !candidate.freeForQuestions { return nil }
             return candidate
         }
         for candidate in ordered {

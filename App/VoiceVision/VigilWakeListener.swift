@@ -38,7 +38,7 @@ import AVFoundation
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.requiresOnDeviceRecognition = true
             request.shouldReportPartialResults = true
-            request.contextualStrings = ["Vigil", "Vigil what is this", "Vigil look at me"]
+            request.contextualStrings = ["Vigil", "Vigil what is this", "Vigil look at me", "Vigil I am stuck", "Vigil remind me in five minutes"]
             self.request = request; delivered = false
             recognition = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 Task { @MainActor in

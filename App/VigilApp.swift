@@ -30,6 +30,7 @@ import CoreImage.CIFilterBuiltins
             #if VIGIL_VOICE_VISION
             Button("What is this?"){VoiceVisionController.shared.ask(.whatIsThis(""))}
             Button("Look at me"){VoiceVisionController.shared.ask(.lookAtMe(""))}
+            Button("I’m stuck"){VoiceVisionController.shared.ask(.stuck(""))}
             Button("Voice and vision introduction"){VoiceVisionController.shared.showIntroduction=true}
             #endif
             Button("Help"){openWindow(id:"help")}
@@ -135,7 +136,14 @@ struct FocusDashboard:View {
                 Text("Work screens stay private. Ideas can wait for Sunday.").font(.caption).foregroundStyle(.secondary).frame(maxWidth:.infinity)
             }.padding(24).frame(maxWidth:700).frame(maxWidth:.infinity)
         }.tint(Color(red:0.37,green:0.42,blue:0.71))
-        .onAppear{speech.onResult=voice;calendar.refresh()}
+        .onAppear{speech.onResult=voice;calendar.refresh()
+            #if VIGIL_VOICE_VISION
+            VigilSupportController.shared.currentTask = state.session?.status == .ended ? "" : state.session?.task ?? ""
+            #endif
+        }
+        #if VIGIL_VOICE_VISION
+        .onChange(of: state.session) { _, session in VigilSupportController.shared.currentTask = session?.status == .ended ? "" : session?.task ?? "" }
+        #endif
         .sheet(isPresented:$showAsk){VigilAskView()}
         .sheet(isPresented:$showHistory){VigilHistoryView(sessions:sessions)}
         .sheet(isPresented:$showParking){ParkingView(ideas:state.ideas)}

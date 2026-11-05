@@ -74,7 +74,7 @@ class BrainTests(unittest.TestCase):
   for i,m in enumerate(self.models):router.health[router.id(m)].update(status='green',latency=i)
   reply=router.complete({'purpose':'question','text':'What is this?','image':'synthetic'})
   self.assertEqual(reply['text'],'A blue shirt.');self.assertFalse(reply['local'])
-  self.assertEqual(calls,['opencode-go','openrouter','nvidia'])
+  self.assertEqual(calls,['openrouter','nvidia'])
  def test_question_skips_paid_openrouter_and_never_invents_local_vision(self):
   calls=[]
   paid=candidate('openrouter','vendor/paid')

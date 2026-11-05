@@ -1,0 +1,50 @@
+name: Vigil Tuck and brain credential checks
+on:
+  push:
+    branches: [codex/vigil-keys-fix-20261104]
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  checks:
+    runs-on: macos-26-intel
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test credential selection and brain routing
+        run: |
+          set -o pipefail
+          swift test --jobs 2 2>&1 | tee unit-tests.log
+      - name: Generate project
+        run: |
+          command -v xcodegen || brew install xcodegen
+          xcodegen generate
+      - name: Build Keith and Macy editions without credentials
+        run: |
+          for scheme in VigilMac VigilMacyMac; do
+            xcodebuild -project Vigil.xcodeproj -scheme "$scheme" -configuration Release -destination 'generic/platform=macOS' -derivedDataPath "build/$scheme" -jobs 2 CODE_SIGNING_ALLOWED=NO build > "$scheme-build.log" 2>&1
+          done
+          for scheme in Vigil VigilMacy; do
+            xcodebuild -project Vigil.xcodeproj -scheme "$scheme" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "build/$scheme" -jobs 2 CODE_SIGNING_ALLOWED=NO build > "$scheme-build.log" 2>&1
+          done
+      - name: Preserve unsigned apps for authorised signing and device verification
+        run: |
+          mkdir -p delivery
+          for scheme in VigilMac VigilMacyMac; do
+            ditto -c -k --sequesterRsrc --keepParent "build/$scheme/Build/Products/Release/Vigil.app" "delivery/$scheme.zip"
+          done
+          for scheme in Vigil VigilMacy; do
+            ditto -c -k --sequesterRsrc --keepParent "build/$scheme/Build/Products/Release-iphoneos/Vigil.app" "delivery/$scheme.zip"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Vigil-keys-fix
+          retention-days: 3
+          path: |
+            delivery/
+            unit-tests.log
+            *-build.log

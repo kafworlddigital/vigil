@@ -16,6 +16,7 @@ enum VigilEdition {
     static let brainURL=URL(string:"https://hermes-ovh.tail33f19f.ts.net:8443/vigil")!
     @Published var models:[ModelHealth]=[]
     @Published var testing=false
+    @Published private(set) var usingBrain=false
     @Published var message="Checking available models…"
     @Published var lastModel="On-device fallback ready"
     @Published var notifications=UserDefaults.standard.object(forKey:"vigil.notifications") as? Bool ?? true
@@ -25,6 +26,7 @@ enum VigilEdition {
     private static let providers=["opencode-go","opencode","openrouter","nvidia","ollama-cloud"]
     static func keyService(_ provider:String)->String { "com.kafworlddigital.vigil." + (provider=="opencode-go" ? "opencode-go" : provider) }
     private func credentials()->[String:String] {
+        guard !VigilEdition.macy else{return [:]}
         var result:[String:String]=[:]
         for provider in Self.providers { result[provider]=KeyVault.read(service:Self.keyService(provider)) }
         if !VigilEdition.macy,result["opencode-go"]==nil {result["opencode-go"]=KeyVault.read(service:"com.kafworlddigital.vigil.opencode-go")}
@@ -34,7 +36,7 @@ enum VigilEdition {
         guard !started else{return};started=true
         let args=ProcessInfo.processInfo.arguments
         #if os(macOS)
-        if let i=args.firstIndex(of:"--vigil-import-keys"),i+1<args.count,
+        if !VigilEdition.macy,let i=args.firstIndex(of:"--vigil-import-keys"),i+1<args.count,
            let data=try? Data(contentsOf:URL(fileURLWithPath:args[i+1])),let keys=try? JSONDecoder().decode([String:String].self,from:data) {
             for (provider,key) in keys where Self.providers.contains(provider) {try? KeyVault.write(key,service:Self.keyService(provider))}
             if let token=keys["brain"] {try? KeyVault.write(token,service:"com.kafworlddigital.vigil.brain")}
@@ -55,17 +57,28 @@ enum VigilEdition {
         }
     }
     func saveKey(_ key:String,provider:String)->Bool {
+        guard !VigilEdition.macy else{return false}
         do {try KeyVault.write(key,service:Self.keyService(provider));message="Saved securely on this device.";Task{await testAll()};return true}
         catch {message="Couldn't save that key. Please try again.";return false}
     }
     func testAll() async {
-        guard !testing,let router else{return};testing=true;defer{testing=false}
+        if testing {
+            while testing && !Task.isCancelled {try? await Task.sleep(nanoseconds:100_000_000)}
+            return
+        }
+        guard let router else{return};testing=true;defer{testing=false}
+        // The modern shared store never prompts or searches the damaged legacy login store.
+        _=await Task.detached(priority:.utility){TuckKeychainBridge.refresh()}.value
         await enrolAutomatically()
         await router.setKeys(credentials())
         models=await router.snapshot()
         // The server probes models in parallel. Direct probes are only needed if it is unreachable.
-        if let cloud=await brainHealth() {await router.importHealth(cloud)}
-        else {await router.probeAll()}
+        if let cloud=await brainHealth() {usingBrain=true;await router.importHealth(cloud,authoritative:true)}
+        else {
+            usingBrain=false
+            if VigilEdition.macy {await router.brainUnavailable()}
+            else {await router.probeAll()}
+        }
         let states=await router.snapshot()
         models=states.sorted{a,b in a.provider==b.provider ? a.model<b.model:a.provider<b.provider}
         let count=models.filter{$0.status=="green"}.count
@@ -106,7 +119,9 @@ enum VigilEdition {
         start()
         if let reply=try? await brain(prompt,permitsSend:permitsSend) {lastModel="\(reply.provider) · \(reply.model)";return reply}
         guard await permitsSend() else{throw RouterError.privateScreen}
-        var reply=try await router?.complete(prompt,permitsSend:permitsSend) ?? ModelHealthRouter.localReply(prompt)
+        var reply:ModelReply
+        if VigilEdition.macy {reply=ModelHealthRouter.localReply(prompt)}
+        else {reply=try await router?.complete(prompt,permitsSend:permitsSend) ?? ModelHealthRouter.localReply(prompt)}
         if reply.local && !prompt.screen {
             #if canImport(FoundationModels)
             if #available(macOS 26.0,iOS 26.0,*),case .available=SystemLanguageModel.default.availability {
@@ -180,6 +195,6 @@ struct ModelHealthView:View {
             }
             }
             Toggle("Notifications",isOn:Binding(get:{ai.notifications},set:ai.setNotifications))
-        }.task{ai.start()}
+        }.task{ai.start();await ai.testAll()}
     }
 }

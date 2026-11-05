@@ -201,7 +201,7 @@ struct VigilSettingsView:View {
             Divider();Text("Work privacy guard").font(.headline)
             ForEach(PrivacyGuard.displayList,id:\.self){Text($0).font(.callout)}
             Text("Any visible work window skips the whole check. It is recorded as private (skipped), never off-task.").font(.caption).foregroundStyle(.secondary)
-        }.padding(24).frame(maxWidth:600,alignment:.leading)}.frame(minWidth:300,minHeight:300).sheet(isPresented:$showHelp){VigilHelpView()}.sheet(isPresented:$showIntro){VigilIntroView{showIntro=false}.frame(idealWidth:720,idealHeight:700).interactiveDismissDisabled()}.onAppear{value=state.settings;feedback="On-device help is ready. Connect this device to use the server."}
+        }.padding(24).frame(maxWidth:600,alignment:.leading)}.frame(minWidth:300,minHeight:300).sheet(isPresented:$showHelp){VigilHelpView()}.sheet(isPresented:$showIntro){VigilIntroView{showIntro=false}.frame(idealWidth:720,idealHeight:700).interactiveDismissDisabled()}.onAppear{value=state.settings;feedback=""}
     }
 }
 #if os(macOS)

@@ -106,7 +106,7 @@ enum VigilPointing {
             }
         }
         pendingIdeas=(try? Data(contentsOf:folder.appendingPathComponent("pending-ideas.json"))).flatMap{try? JSONDecoder().decode([UUID].self,from:$0)} ?? []
-        _=KeyVault.importTuckIfAvailable()
+        VigilAI.shared.start()
         let nc=NSWorkspace.shared.notificationCenter
         observers.append(nc.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main){[weak self] _ in Task{@MainActor in self?.pause()} })
         timer=Timer.scheduledTimer(withTimeInterval:1,repeats:true){[weak self] _ in Task{@MainActor in self?.tick()} }

@@ -68,12 +68,21 @@ public actor ModelHealthRouter {
         for candidate in self.candidates where health[candidate.id]==nil { health[candidate.id]=ModelHealth(candidate) }
     }
     public func setKeys(_ value:[String:String]) { keys=value }
+    /// Macy never falls back to device provider credentials or misleading missing-key errors.
+    public func brainUnavailable() {
+        for candidate in candidates {
+            var state=ModelHealth(candidate);state.status="amber"
+            state.error="Vigil brain unavailable · on-device help ready"
+            health[candidate.id]=state
+        }
+        persist()
+    }
     /// Reuse the authenticated brain's checks instead of spending the same allowance twice.
-    public func importHealth(_ records:[ModelHealth]) {
+    public func importHealth(_ records:[ModelHealth],authoritative:Bool=false) {
         for state in records {
             guard let candidate=candidates.first(where:{$0.id==state.id}),candidate.provider==state.provider,candidate.model==state.model,
                   ["green","amber","red"].contains(state.status) else{continue}
-            if (state.checkedAt ?? .distantPast)>=(health[state.id]?.checkedAt ?? .distantPast) {health[state.id]=state}
+            if authoritative || (state.checkedAt ?? .distantPast)>=(health[state.id]?.checkedAt ?? .distantPast) {health[state.id]=state}
         }
         persist()
     }

@@ -13,7 +13,7 @@ import SwiftUI
             do {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 let controller = VoiceVisionController.shared
-                func render<V: View>(_ view: V, _ name: String) throws {
+                @MainActor func render<V: View>(_ view: V, _ name: String) throws {
                     let renderer = ImageRenderer(content: view.environment(\.colorScheme, .light))
                     renderer.scale = 2
                     guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,

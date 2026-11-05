@@ -43,12 +43,14 @@ public struct ModelReply: Codable, Sendable {
     public init(text:String,provider:String,model:String,local:Bool = false) { self.text=text;self.provider=provider;self.model=model;self.local=local }
 }
 public struct ModelPrompt: Sendable {
+    public enum Purpose: String, Sendable { case focus, question }
     public var system: String
     public var text: String
     public var image: Data?
     public var mime: String
+    public var purpose: Purpose
     public var screen: Bool { image != nil }
-    public init(system:String = "",text:String,image:Data? = nil,mime:String = "image/jpeg") { self.system=system;self.text=text;self.image=image;self.mime=mime }
+    public init(system:String = "",text:String,image:Data? = nil,mime:String = "image/jpeg",purpose:Purpose = .focus) { self.system=system;self.text=text;self.image=image;self.mime=mime;self.purpose=purpose }
 }
 
 /// Stateless prompts, persisted health only. A failed provider never prevents the next provider or local reply.
@@ -123,6 +125,7 @@ public actor ModelHealthRouter {
         let now=Date()
         let ordered=snapshot().compactMap { state -> ModelCandidate? in
             guard !state.resting(now),let candidate=candidates.first(where:{$0.id==state.id}),(!prompt.screen || candidate.vision),!(keys[candidate.provider] ?? "").isEmpty else { return nil }
+            if prompt.purpose == .question && candidate.provider == "openrouter" && !candidate.model.hasSuffix(":free") { return nil }
             return candidate
         }
         for candidate in ordered {
@@ -133,7 +136,7 @@ public actor ModelHealthRouter {
                 let request=try Self.request(candidate,prompt:prompt,key:keys[candidate.provider]!,session:sessionID,timeout:timeout,probe:false)
                 let sent=Date();let (data,response)=try await transport.data(for:request)
                 let text=try Self.answer(data,response:response,candidate:candidate,now:Date())
-                if prompt.screen { _=try FocusDecision.decode(Data(Self.cleanJSON(text).utf8)) }
+                if prompt.screen && prompt.purpose == .focus { _=try FocusDecision.decode(Data(Self.cleanJSON(text).utf8)) }
                 var state=ModelHealth(candidate);state.status="green";state.checkedAt=Date();state.latency=Date().timeIntervalSince(sent);health[candidate.id]=state;persist()
                 return ModelReply(text:Self.cleanJSON(text),provider:candidate.provider,model:candidate.model)
             } catch is CancellationError { throw CancellationError() }
@@ -143,6 +146,7 @@ public actor ModelHealthRouter {
         return Self.localReply(prompt)
     }
     public static func localReply(_ prompt:ModelPrompt)->ModelReply {
+        if prompt.purpose == .question { return ModelReply(text:VoiceVisionPolicy.unavailable,provider:"on-device",model:"No visual answer available",local:true) }
         if prompt.screen {
             // Conservative local heuristic: a matching task word is context, never proof of drift.
             let lines=prompt.text.lowercased().components(separatedBy:"\n")

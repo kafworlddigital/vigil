@@ -64,6 +64,28 @@ class BrainTests(unittest.TestCase):
  def test_forbidden_models(self):
   for name in ['openai/test','gpt-6','vendor/GPT-something','codex-model']:
    self.assertFalse(BrainRouter.permitted(candidate('openrouter',name)))
+ def test_visual_question_accepts_sentence_and_fails_over(self):
+  calls=[]
+  def transport(m,prompt,timeout,probe=False):
+   calls.append(m['provider'])
+   if m['provider']!='nvidia':raise Failure('429',time.time()+60)
+   return 'A blue shirt.'
+  router=BrainRouter(self.models,self.keys,transport)
+  for i,m in enumerate(self.models):router.health[router.id(m)].update(status='green',latency=i)
+  reply=router.complete({'purpose':'question','text':'What is this?','image':'synthetic'})
+  self.assertEqual(reply['text'],'A blue shirt.');self.assertFalse(reply['local'])
+  self.assertEqual(calls,['opencode-go','openrouter','nvidia'])
+ def test_question_skips_paid_openrouter_and_never_invents_local_vision(self):
+  calls=[]
+  paid=candidate('openrouter','vendor/paid')
+  router=BrainRouter([paid],self.keys,lambda *args:calls.append(args))
+  reply=router.complete({'purpose':'question','text':'What is this?','image':'synthetic'})
+  self.assertTrue(reply['local']);self.assertEqual(calls,[])
+  self.assertEqual(reply['text'],"I couldn't get a clear answer just now.")
+ def test_focus_still_rejects_non_classification_vision_answer(self):
+  router=BrainRouter(self.models,self.keys,lambda *args:'A blue shirt.')
+  reply=router.complete({'text':'Task: synthetic','image':'synthetic'})
+  self.assertTrue(reply['local']);self.assertEqual(json.loads(reply['text'])['choice'],'uncertain')
  def test_single_use_activation_and_token_hash_only(self):
   with tempfile.TemporaryDirectory() as folder:
    path=Path(folder)/'devices.json';registry=DeviceRegistry(path)

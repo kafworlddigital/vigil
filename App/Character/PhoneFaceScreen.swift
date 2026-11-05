@@ -39,6 +39,9 @@ struct PhoneFaceScreen:View {
                     Button(action:pair){Image(systemName:"qrcode.viewfinder")}.accessibilityLabel("Pair Mac")
                     Button{dashboard=true}label:{Image(systemName:"gearshape")}.accessibilityLabel("Focus, parking lot, calendar and Settings")
                 }
+                #if VIGIL_VOICE_VISION
+                VigilVoiceBar().padding(10).background(.black.opacity(0.65),in:RoundedRectangle(cornerRadius:12))
+                #endif
                 if !link.nudge.isEmpty{Text(link.nudge).font(.fredoka(16)).foregroundStyle(Color(hex:Palette.nose)).padding(12).background(.white,in:RoundedRectangle(cornerRadius:18)).frame(maxWidth:480)}
                 if speech.listening{Text(speech.transcript.isEmpty ? "Listening…":speech.transcript).font(.plexSans(14))}
                 if !speech.message.isEmpty{Text(speech.message).font(.caption)}
@@ -61,7 +64,11 @@ struct PhoneFaceScreen:View {
         }.background(.black).persistentSystemOverlays(.hidden)
         .onAppear{speech.onResult=voice}
         .onChange(of:held){_,down in
-            if down {link.face.localMood = .listening;link.send("faceMood",text:"listening");Task{@MainActor in if held {await speech.begin()}}}
+            if down {
+                #if VIGIL_VOICE_VISION
+                VoiceVisionController.shared.pauseForSpeech()
+                #endif
+                link.face.localMood = .listening;link.send("faceMood",text:"listening");Task{@MainActor in if held {await speech.begin()}}}
             else {speech.finish();link.face.localMood = .thinking;link.send("faceMood",text:"thinking");DispatchQueue.main.asyncAfter(deadline:.now()+2){link.face.localMood=nil;link.send("faceRelease")}}
         }
         .onChange(of:phase){_,p in if p != .active{speech.cancel();link.face.localMood=nil}}

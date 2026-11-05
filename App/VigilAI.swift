@@ -35,6 +35,7 @@ enum VigilEdition {
     func start() {
         guard !started else{return};started=true
         let args=ProcessInfo.processInfo.arguments
+        if args.contains("--vigil-feature-proof") {return}
         #if os(macOS)
         if !VigilEdition.macy,let i=args.firstIndex(of:"--vigil-import-keys"),i+1<args.count,
            let data=try? Data(contentsOf:URL(fileURLWithPath:args[i+1])),let keys=try? JSONDecoder().decode([String:String].self,from:data) {
@@ -108,6 +109,7 @@ enum VigilEdition {
         var request=URLRequest(url:Self.brainURL.appendingPathComponent("answer"),timeoutInterval:180);request.httpMethod="POST"
         request.setValue("Bearer \(token)",forHTTPHeaderField:"Authorization");request.setValue("application/json",forHTTPHeaderField:"Content-Type")
         var body:[String:Any]=["system":prompt.system,"text":prompt.text,"mime":prompt.mime]
+        if prompt.purpose == .question { body["purpose"]="question" }
         if let image=prompt.image {body["image"]=image.base64EncodedString()}
         request.httpBody=try JSONSerialization.data(withJSONObject:body)
         let (data,response)=try await URLTransport().data(for:request)
@@ -116,13 +118,15 @@ enum VigilEdition {
         return reply.local ? nil:reply
     }
     func answer(_ prompt:ModelPrompt,permitsSend:@escaping @Sendable () async -> Bool = {true}) async throws -> ModelReply {
+        try Task.checkCancellation()
         start()
         if let reply=try? await brain(prompt,permitsSend:permitsSend) {lastModel="\(reply.provider) · \(reply.model)";return reply}
+        try Task.checkCancellation()
         guard await permitsSend() else{throw RouterError.privateScreen}
         var reply:ModelReply
         if VigilEdition.macy {reply=ModelHealthRouter.localReply(prompt)}
         else {reply=try await router?.complete(prompt,permitsSend:permitsSend) ?? ModelHealthRouter.localReply(prompt)}
-        if reply.local && !prompt.screen {
+        if reply.local && !prompt.screen && prompt.purpose == .focus {
             #if canImport(FoundationModels)
             if #available(macOS 26.0,iOS 26.0,*),case .available=SystemLanguageModel.default.availability {
                 // Apple's model is on the device; the deterministic reply remains the final fallback.

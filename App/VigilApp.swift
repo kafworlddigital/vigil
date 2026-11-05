@@ -27,12 +27,17 @@ import CoreImage.CIFilterBuiltins
             Button("Move face (hold Option and drag)"){VigilCharacterHost.shared.showMoveHint()}
             Menu("Expressions") {ForEach([Mood.happy,.surprised,.listening,.sleepy,.thinking],id:\.rawValue){mood in Button(mood.title){VigilCharacterHost.shared.setMood(mood)}};Button("Automatic expressions"){VigilCharacterHost.shared.releaseMood()}}
             Button("Test a nudge"){engine.testNudge()}
+            #if VIGIL_VOICE_VISION
+            Button("What is this?"){VoiceVisionController.shared.ask(.whatIsThis(""))}
+            Button("Look at me"){VoiceVisionController.shared.ask(.lookAtMe(""))}
+            Button("Voice and vision introduction"){VoiceVisionController.shared.showIntroduction=true}
+            #endif
             Button("Help"){openWindow(id:"help")}
             SettingsLink()
             Divider();Button("Quit Vigil"){NSApplication.shared.terminate(nil)}
         }
         Window("Vigil Help",id:"help"){VigilHelpView().frame(minWidth:560,minHeight:600)}
-        SwiftUI.Settings { VigilSettingsView(state:engine.state,changed:engine.updateSettings).frame(width:460).padding() }
+        SwiftUI.Settings { VigilSettingsView(state:engine.state,changed:engine.updateSettings).frame(width:460).padding().vigilVoiceVision() }
     }
     #else
     var body:some Scene { WindowGroup{PhoneRoot()} }
@@ -59,7 +64,12 @@ private struct HoldToTalk:View {
         }.contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance:0).updating($pressing){_,held,_ in held=true})
         .onChange(of:pressing){_,held in
-            if held{Task{@MainActor in if pressing{await speech.begin()}}}else{speech.finish()}
+            if held{
+                #if VIGIL_VOICE_VISION
+                VoiceVisionController.shared.pauseForSpeech()
+                #endif
+                Task{@MainActor in if pressing{await speech.begin()}}
+            }else{speech.finish()}
         }
         .onChange(of:scenePhase){_,phase in if phase != .active{speech.cancel()}}
         .accessibilityAddTraits(.isButton)
@@ -92,6 +102,9 @@ struct FocusDashboard:View {
             VStack(alignment:.leading,spacing:24){
                 HStack{VStack(alignment:.leading,spacing:5){Text(CompanionPreferences().name).font(.largeTitle.weight(.semibold));Text("A little company for the task ahead.").font(.subheadline).foregroundStyle(.secondary)};Spacer();Button(action:{showSettings=true}){Image(systemName:"gearshape")}.buttonStyle(.plain).accessibilityLabel("Settings")}
                 HStack(spacing:7){Circle().fill(connected ? Color.green:Color.orange).frame(width:7,height:7);Text(connectionText).font(.caption).foregroundStyle(.secondary);Spacer();Button("Pair",action:pairing).font(.caption)}
+                #if VIGIL_VOICE_VISION
+                VigilVoiceBar()
+                #endif
                 HoldToTalk(speech:speech).frame(maxWidth:.infinity)
                 if !speech.message.isEmpty{Text(speech.message).font(.callout).foregroundStyle(.secondary)}
                 if speech.listening{Text(speech.transcript).font(.callout).frame(maxWidth:.infinity)}
@@ -177,6 +190,9 @@ struct VigilSettingsView:View {
             Link("Report a problem",destination:VigilSupport.reportURL)
             Button("Show intro again"){showIntro=true}
             CompanionControls()
+            #if VIGIL_VOICE_VISION
+            VigilFeatureSettings()
+            #endif
             ModelHealthView()
             Text("Your included Go plan, free models and on-device help. No OpenAI or GPT models.").font(.caption).foregroundStyle(.secondary)
             LabeledContent("Model in use",value:state.model)
@@ -217,6 +233,7 @@ struct MacRoot:View {
         .safeAreaInset(edge:.bottom){if !engine.error.isEmpty{Text(engine.error).font(.callout).padding()}}
         .task{engine.onBroadcast=server.broadcast;server.onPacket=engine.receive;server.start();VigilCharacterHost.shared.start(server:server);engine.sync()}
         .sheet(isPresented:$showPair){MacPairView(record:server.pairing)}
+        .vigilVoiceVision()
     }
 }
 struct MacPairView:View {
@@ -235,6 +252,7 @@ struct PhoneRoot:View {
     var body:some View{
         VigilProofScreen(state:link.state){PhoneFaceScreen(link:link,pair:{showPair=true})}
             .task{link.start()}
+            .vigilVoiceVision()
             .onChange(of:link.state.session?.status){_,status in UIApplication.shared.isIdleTimerDisabled = status == .running && phase == .active}
             .onChange(of:phase){_,new in
                 if new == .active{link.start();link.send("focusSync");UIApplication.shared.isIdleTimerDisabled = link.state.session?.status == .running}

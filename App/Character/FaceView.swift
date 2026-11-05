@@ -177,6 +177,9 @@ final class FaceAnimator {
 struct FaceView: View {
     let animator: FaceAnimator
     var transparent = false
+    #if VIGIL_VOICE_VISION
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #endif
 
     // The design is drawn on an 844 × 390 landscape phone.
     static let design = CGSize(width: 844, height: 390)
@@ -184,12 +187,22 @@ struct FaceView: View {
     var body: some View {
         TimelineView(.animation) { timeline in
             Canvas { ctx, size in
-                let frame = animator.step(timeline.date.timeIntervalSinceReferenceDate)
+                var frame = animator.step(timeline.date.timeIntervalSinceReferenceDate)
+                #if VIGIL_VOICE_VISION
+                let features=VoiceVisionController.shared
+                let age=timeline.date.timeIntervalSince(features.effectAt)
+                if features.effect == .eyeWiggle,age >= 0,age < 0.9,!reduceMotion {
+                    frame.gaze.x += sin(age * .pi * 9) * 0.35 * (1-age/0.9)
+                }
+                #endif
                 FaceView.draw(frame, in: &ctx, size: size, transparent: transparent)
             }
         }
         .background(transparent ? Color.clear : Color.black)
         .ignoresSafeArea()
+        #if VIGIL_VOICE_VISION
+        .modifier(VigilFaceEffects())
+        #endif
     }
 
     /// Fills a shape with his skin (gradient plus the same soft shine), for eyelids.

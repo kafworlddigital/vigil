@@ -104,6 +104,7 @@ class BrainRouter:
             with self.lock:self.probing=False;self.persist()
     @staticmethod
     def local(prompt):
+        if prompt.get('purpose')=='question':return dict(text="I couldn't get a clear answer just now.",provider='on-device',model='No visual answer available',local=True)
         if prompt.get('image'):
             lines=prompt.get('text','').lower().splitlines();words={s.strip('.,:;!?') for s in (lines[0] if lines else '').split() if len(s)>4}
             matching=sum(word in '\n'.join(lines[1:]) for word in words)
@@ -115,13 +116,14 @@ class BrainRouter:
         with self.lock:byid={self.id(m):m for m in self.models};ranked=self.snapshot()
         for state in ranked:
             m=byid[state['id']]
+            if prompt.get('purpose')=='question' and m['provider']=='openrouter' and not m['model'].endswith(':free'):continue
             if m['provider'] in blocked or not self.keys.get(m['provider']) or self.reset(state)>time.time() or (prompt.get('image') and not m['vision']):continue
             if deadline-time.monotonic()<1:break
             started=time.monotonic()
             try:
                 timeout=min(20,max(1,deadline-time.monotonic()))
                 text=self.transport(m,prompt,timeout)
-                if prompt.get('image'):
+                if prompt.get('image') and prompt.get('purpose','focus')=='focus':
                     text=text.strip();text=text.removeprefix('```json').removeprefix('```').removesuffix('```').strip();decision=json.loads(text)
                     nums=[decision.get(k) for k in ['p_on','p_off','p_uncertain']]
                     if decision.get('choice') not in ['on_task','off_task','uncertain'] or not all(isinstance(x,(int,float)) and 0<=x<=1 for x in nums) or abs(sum(nums)-1)>.02:raise Failure('invalid reply',time.time()+60)
@@ -197,6 +199,8 @@ def serve():
                 self.reply(200,router.snapshot());return
             if not self.path.endswith('/answer'):self.reply(404,{'error':'unknown route'});return
             if not isinstance(data,dict) or not isinstance(data.get('text'),str) or len(data['text'])>14000:self.reply(400,{'error':'invalid prompt'});return
+            if data.get('purpose','focus') not in ['focus','question']:self.reply(400,{'error':'invalid purpose'});return
+            if data.get('purpose')=='question' and registry.valid(self.headers.get('Authorization','').removeprefix('Bearer ')).get('edition')!='keith':self.reply(403,{'error':'Keith edition only'});return
             if data.get('mime','image/jpeg') not in ['image/jpeg','image/png']:self.reply(400,{'error':'invalid image'});return
             if not gate.acquire(blocking=False):self.reply(503,{'error':'busy, use app fallback'});return
             try:self.reply(200,router.complete(data))

@@ -16,11 +16,26 @@ struct VigilHelpView:View {
         ("No AI answers","Open Settings and press Test all now. Amber models may be waiting for a usage reset; red models may have a connection or credential problem. Check your internet connection. Your timer, parking lot and local fallback keep working. TestFlight editions connect automatically; no provider key is needed."),
         ("Permissions","For reminders, allow Notifications. For voice, allow Microphone and Speech Recognition. For pairing, allow Local Network and Camera on the phone. For calendar, allow Calendar access. On the Mac allow Screen Recording only if you want screen checks. If you declined, change the permission in the device's Settings, then reopen Vigil.")
     ]
+    private var featureTopics:[(String,String)] {
+        #if VIGIL_VOICE_VISION
+        return [
+            ("Five nudge styles","Settings → Nudges, voice and vision lets you select Chime, Bounce, Colour flash, Eye wiggle or Spoken line. Each has its own Test button. Quiet nudges remain silent. Reduce Motion replaces moving effects with a glow."),
+            ("Spoken nudges and answers","Choose an installed free Apple voice and volume in Settings, or switch speech off. Nudges are only a few words. Answers use one short sentence."),
+            ("Vigil, what is this?","On Mac, enable wake listening, put your pointer over an item and say ‘Vigil, what is this?’ Accessibility text is preferred; otherwise only a small crop is sent. Protected work windows and secure fields are skipped. iPhone and iPad cannot read another app or the Mac pointer."),
+            ("Answer sparkles and haptics","An answer appears in a small face bubble with a brief sparkle and a light haptic tap where the hardware supports it. Spoken answers respect your voice switch and volume."),
+            ("Vigil, look at me","Ask explicitly, then speak your question during the four-second video and audio clip. Recording has a visible red indicator and Cancel button. The camera stops before inference. Three small frames plus on-device transcribed words go to free or included non-OpenAI models; raw video and audio are not uploaded. The temporary clip is removed after the answer, error or cancellation. Keeping requested clips is off unless you enable it in Settings."),
+            ("Voice and vision permissions","The feature introduction explains Microphone, Speech Recognition, Accessibility and Screen Recording before requesting access. Camera is requested only for your first explicit camera request. Permission refusal is respected; use system Settings to change it. Wake listening stays on-device and requires on-device English recognition. It runs while Vigil is open on iPhone/iPad and stops when backgrounded. Use Stop listening any time. If an Apple recognition session stops, use Restart listening in Settings.")
+        ]
+        #else
+        return []
+        #endif
+    }
     var body:some View {
         ScrollView { VStack(alignment:.leading,spacing:20){
             HStack{Text("Vigil Help").font(.largeTitle.weight(.semibold));Spacer();Button("Done"){dismiss()}}
             Text("A little company for the task ahead.").foregroundStyle(.secondary)
             ForEach(topics.indices,id:\.self){i in VStack(alignment:.leading,spacing:7){Text(topics[i].0).font(.headline);Text(topics[i].1).fixedSize(horizontal:false,vertical:true).foregroundStyle(.secondary)}}
+            ForEach(featureTopics.indices,id:\.self){i in VStack(alignment:.leading,spacing:7){Text(featureTopics[i].0).font(.headline);Text(featureTopics[i].1).fixedSize(horizontal:false,vertical:true).foregroundStyle(.secondary)}}
             Link("Report a problem",destination:VigilSupport.reportURL)
         }.padding(24).frame(maxWidth:680,alignment:.leading).frame(maxWidth:.infinity,alignment:.center)}.frame(minWidth:300,minHeight:300)
     }

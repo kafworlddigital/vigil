@@ -136,7 +136,11 @@ final class PhoneDeviceLink:ObservableObject {
             if let face=packet.face { self.face.receive(face,at:Date.timeIntervalSinceReferenceDate) }
             if packet.command=="nudge",let text=packet.text {
                 self.message=text;self.nudge=text;self.face.localMood = .surprised
+                #if VIGIL_VOICE_VISION
+                if CompanionPreferences().nudge != .quiet { VigilFeedback.nudge() }
+                #else
                 VigilChirp.shared.play()
+                #endif
                 Task { @MainActor in VigilAI.shared.postNotification(text) }
                 DispatchQueue.main.asyncAfter(deadline:.now()+8){[weak self] in self?.nudge="";self?.face.localMood=nil}
             }

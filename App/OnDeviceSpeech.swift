@@ -51,6 +51,9 @@ import AVFoundation
             let result=self.transcript.trimmingCharacters(in:.whitespacesAndNewlines)
             self.cleanUp();self.generation=UUID()
             if !result.isEmpty{self.onResult?(result)}
+            #if VIGIL_VOICE_VISION
+            VoiceVisionController.shared.resumeListening()
+            #endif
         }
     }
     func cancel(){held=false;generation=UUID();cleanUp()}

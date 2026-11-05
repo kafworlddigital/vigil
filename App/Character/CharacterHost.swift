@@ -18,6 +18,9 @@ final class Settings {
 final class VigilDelegate:NSObject,NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification:Notification) {
         NSApp.setActivationPolicy(.regular)
+        #if VIGIL_VOICE_VISION
+        VigilFeatureProof.begin()
+        #endif
         let args=ProcessInfo.processInfo.arguments
         if let i=args.firstIndex(of:"--vigil-test-connections"),i+1<args.count {
             Task{@MainActor in
@@ -113,6 +116,9 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
     func setMood(_ mood:Mood){Settings.shared.mood=mood;cursor.view.engine.brainMood=mood}
     func releaseMood(){cursor.view.engine.brainMood=nil;Settings.shared.mood = .listening}
     func nudge(_ text:String,target:CGPoint?=nil){
+        #if VIGIL_VOICE_VISION
+        if CompanionPreferences().nudge != .quiet {VigilFeedback.nudge()}
+        #endif
         moodRelease?.cancel();setMood(CompanionPreferences().nudge == .quiet ? .listening:.surprised)
         cursor.view.caption=text
         // With no verified OCR target, point at Vigil's own face, never invent a desktop target.

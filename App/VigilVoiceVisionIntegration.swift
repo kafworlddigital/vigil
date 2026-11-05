@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 #if VIGIL_VOICE_VISION
 private struct VigilVoiceVisionIntegration: ViewModifier {
@@ -8,6 +11,11 @@ private struct VigilVoiceVisionIntegration: ViewModifier {
         content
             .task { controller.start() }
             .sheet(isPresented: $controller.showIntroduction) { VigilFeatureIntroduction() }
+            #if os(macOS)
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                controller.refreshVoicePermissions(); controller.resumeListening(); controller.updateBubble()
+            }
+            #endif
             #if os(iOS)
             .onChange(of: scenePhase) { _, phase in
                 if phase == .background { controller.setForeground(false) }

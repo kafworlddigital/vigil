@@ -11,6 +11,164 @@ import ApplicationServices
 /// Explicit bounded evidence modes: silent cloud previews, or an authorised
 /// local hardware check. Neither mode sends a provider request.
 @MainActor enum VigilFeatureProof {
+    /// Explicit overnight check: no permission request and no model/screen upload.
+    static func beginRepairCheck() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "--vigil-audio-check"), index + 1 < args.count else { return }
+        let folder = URL(fileURLWithPath: args[index + 1], isDirectory: true)
+        Task { @MainActor in
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            let controller = VoiceVisionController.shared, wake = controller.wake, voice = VigilVoiceOutput.shared
+            let host = VigilCharacterHost.shared
+            let originalCommand = wake.onCommand, originalWake = wake.onWake
+            var commands = 0
+            wake.onCommand = { _ in commands += 1 }; wake.onWake = {}
+            defer { wake.onCommand = originalCommand; wake.onWake = originalWake; wake.stop(); controller.resumeListening() }
+            controller.refreshVoicePermissions(); wake.stop(); voice.stop()
+            var result: [String: Any] = ["build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?",
+                "bundleID": Bundle.main.bundleIdentifier ?? "?", "microphonePermission": AVCaptureDevice.authorizationStatus(for: .audio).rawValue,
+                "speechPermission": SFSpeechRecognizer.authorizationStatus().rawValue, "onDeviceLocales": VigilWakeListener.availability,
+                "voicePermissionCardNeeded": controller.voiceNeedsPermission, "systemPermissionPromptsTriggered": false,
+                "outputBefore": VigilAudioRoute.snapshot().dictionary, "appVolume": UserDefaults.standard.object(forKey: "vigil.voice.volume") as? Double ?? 0.5,
+                "captureKind": "real installed app NSWindow content-view bitmaps; not an independent WindowServer capture"]
+            if let microphone = AVCaptureDevice.default(for: .audio) {
+                result["microphoneDevice"] = ["name": microphone.localizedName, "connected": microphone.isConnected, "suspended": microphone.isSuspended]
+            }
+            @MainActor func save(_ window: NSWindow?, _ name: String) {
+                guard let view = window?.contentView else { return }
+                view.layoutSubtreeIfNeeded(); view.displayIfNeeded()
+                guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: folder.appendingPathComponent(name + ".png")) }
+            }
+            controller.effectAt = .distantPast
+            save(host.panel, "face-before")
+            VigilFeedback.testNudge(.colourFlash)
+            var previous = 0.0
+            for (number, seconds) in [0.36, 0.8, 1.2, 1.6, 2.0, 2.45].enumerated() {
+                try? await Task.sleep(nanoseconds: UInt64((seconds - previous) * 1_000_000_000)); previous = seconds
+                save(host.panel, "face-pulse-\(number + 1)")
+            }
+            controller.installHotKey()
+            result["hotKeyLabel"] = controller.hotKeyLabel; result["hotKeyRegistrationStatus"] = controller.hotKeyStatus
+            let keyBefore = controller.manualStartCount
+            if CGPreflightPostEventAccess() {
+                for down in [true, false] {
+                    let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(controller.hotKeyCode), keyDown: down)
+                    var flags: CGEventFlags = []
+                    if controller.hotKeyModifiers & UInt32(controlKey) != 0 { flags.insert(.maskControl) }
+                    if controller.hotKeyModifiers & UInt32(optionKey) != 0 { flags.insert(.maskAlternate) }
+                    if controller.hotKeyModifiers & UInt32(shiftKey) != 0 { flags.insert(.maskShift) }
+                    if controller.hotKeyModifiers & UInt32(cmdKey) != 0 { flags.insert(.maskCommand) }
+                    event?.flags = flags; event?.post(tap: .cghidEventTap)
+                }
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            }
+            result["hotkeyNativeEventReceived"] = controller.manualStartCount > keyBefore
+            save(controller.bubbleForCheck, "shortcut-listening-card")
+            wake.stop()
+            // AVAudioPlayer isPlaying + progressing playhead + metered signal and
+            // independently queried non-zero, unmuted default device are the
+            // requested alternative when system loopback is unavailable.
+            VigilChime.shared.play()
+            var chimeSamples: [[String: Any]] = []
+            for _ in 0..<7 {
+                try? await Task.sleep(nanoseconds: 70_000_000)
+                chimeSamples.append(["isPlaying": VigilChime.shared.isPlaying, "time": VigilChime.shared.playbackTime,
+                    "peakDBFS": VigilChime.shared.playbackPower, "output": VigilAudioRoute.snapshot().dictionary])
+            }
+            result["chimePlayback"] = chimeSamples
+            voice.speak("Vigil here.", entireLine: true, audition: true)
+            var speechSamples: [[String: Any]] = []
+            for _ in 0..<100 {
+                try? await Task.sleep(nanoseconds: 70_000_000)
+                if voice.isPlaying {
+                    speechSamples.append(["isPlaying": true, "time": voice.playbackTime, "peakDBFS": voice.playbackPower,
+                        "output": VigilAudioRoute.snapshot().dictionary, "playerDeviceUID": voice.outputDevice])
+                }
+                if !voice.speaking { break }
+            }
+            result["speechPlayback"] = speechSamples; result["speechRenderedPeak"] = voice.renderedPeak
+            result["speechBackend"] = voice.backend; voice.stop(); wake.stop()
+            let tests = NSPanel(contentRect: CGRect(x: 80, y: 180, width: 480, height: 700), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            tests.title = "Vigil Settings check"; tests.hidesOnDeactivate = false
+            tests.contentView = NSHostingView(rootView: ScrollView { VigilFeatureSettings().padding(20) }.frame(width: 480, height: 700))
+            tests.orderFrontRegardless()
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            @MainActor func find(_ object: NSObject, _ wanted: String, _ depth: Int = 0) -> NSObject? {
+                guard depth < 25 else { return nil }
+                for key in ["accessibilityIdentifier", "accessibilityLabel"] {
+                    let selector = NSSelectorFromString(key)
+                    if object.responds(to: selector), let value = object.perform(selector)?.takeUnretainedValue() as? String, value == wanted { return object }
+                }
+                let selector = NSSelectorFromString("accessibilityChildren")
+                if object.responds(to: selector), let children = object.perform(selector)?.takeUnretainedValue() as? [NSObject] {
+                    for child in children { if let match = find(child, wanted, depth + 1) { return match } }
+                }
+                if let view = object as? NSView { for child in view.subviews { if let match = find(child, wanted, depth + 1) { return match } } }
+                return nil
+            }
+            var pressed = false
+            if let view = tests.contentView, let button = find(view, "features.soundCheck") ?? find(view, "Sound check") {
+                let selector = NSSelectorFromString("accessibilityPerformPress")
+                if button.responds(to: selector) {
+                    typealias Press = @convention(c) (AnyObject, Selector) -> Bool
+                    pressed = unsafeBitCast(button.method(for: selector), to: Press.self)(button, selector)
+                }
+            }
+            result["settingsSoundCheckButtonPressed"] = pressed
+            result["settingsChangeHotkeyPresent"] = tests.contentView.flatMap { find($0, "features.changeHotkey") } != nil
+            if !pressed { controller.soundCheck() }
+            for _ in 0..<120 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                if !controller.soundCheckRunning { break }
+            }
+            result["soundCheckMessage"] = controller.soundCheckMessage
+            result["soundCheckInputBuffers"] = wake.inputBuffers; result["soundCheckMaximumInputPeak"] = wake.maximumInputPeak
+            save(tests, "settings-sound-check"); tests.orderOut(nil); voice.stop(); wake.stop()
+            // Local synthetic audio only; no human audio/transcript is retained.
+            var recognitionResults: [[String: Any]] = []
+            if !controller.voiceNeedsPermission {
+                for name in ["Vigil", "Virgil"] {
+                    let url = folder.appendingPathComponent("synthetic-\(name).aiff")
+                    let say = Process(); say.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+                    say.arguments = ["-o", url.path, "--", name + ", what is this?"]
+                    say.standardOutput = FileHandle.nullDevice; say.standardError = FileHandle.nullDevice
+                    do { try say.run(); say.waitUntilExit() } catch { continue }
+                    guard say.terminationStatus == 0 else { continue }
+                    for locale in ["en-GB", "en-US"] {
+                        let test = VigilSyntheticRecognition()
+                        recognitionResults.append(await test.run(url, locale: locale, name: name))
+                    }
+                    wake.start(); let count = wake.wakeCount, before = commands
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    if let player = try? AVAudioPlayer(contentsOf: url) {
+                        player.currentDevice = VigilAudioRoute.snapshot().uid
+                        player.volume = VoiceVisionPolicy.volume(UserDefaults.standard.object(forKey: "vigil.voice.volume") as? Double ?? 0.5)
+                        _ = player.play()
+                        for _ in 0..<65 {
+                            try? await Task.sleep(nanoseconds: 100_000_000)
+                            if commands > before { break }
+                        }
+                        recognitionResults.append(["kind": "real default-output speaker to microphone", "name": name,
+                            "wakeDetected": wake.wakeCount > count, "commandDetected": commands > before,
+                            "inputBuffers": wake.inputBuffers, "inputPeak": wake.maximumInputPeak, "listenerError": wake.lastError,
+                            "listenerMessage": wake.message, "locale": wake.localeIdentifier])
+                        player.stop()
+                    }
+                    wake.stop()
+                }
+            }
+            result["recognitionTests"] = recognitionResults
+            result["finishedAt"] = ISO8601DateFormatter().string(from: Date())
+            if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
+                try? data.write(to: folder.appendingPathComponent("hardware-results.json"), options: .atomic)
+            }
+            controller.status = ""; controller.answer = ""
+            controller.updateBubble()
+        }
+    }
     /// Explicit local hardware check. Unlike preview mode this really plays audio.
     static func beginNudgeCheck() {
         let args = ProcessInfo.processInfo.arguments
@@ -192,6 +350,34 @@ import ApplicationServices
         }
     }
     private enum ProofFailure: Error { case render }
+}
+
+/// An actual Apple on-device recognizer for a known, locally generated sentence.
+@MainActor private final class VigilSyntheticRecognition {
+    private var task: SFSpeechRecognitionTask?
+    private var done = false
+    private var text = ""
+    private var failure = ""
+    func run(_ url: URL, locale: String, name: String) async -> [String: Any] {
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)), recognizer.isAvailable, recognizer.supportsOnDeviceRecognition else {
+            return ["kind": "synthetic file on-device recognition", "name": name, "locale": locale, "available": false]
+        }
+        let request = SFSpeechURLRecognitionRequest(url: url); request.requiresOnDeviceRecognition = true
+        request.contextualStrings = ["Vigil", "Virgil", "Vigil what is this"]
+        task = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            Task { @MainActor in
+                guard let self else { return }
+                if let result { self.text = result.bestTranscription.formattedString; if result.isFinal { self.done = true } }
+                if let error { let e = error as NSError; self.failure = "\(e.domain) \(e.code)"; self.done = true }
+            }
+        }
+        for _ in 0..<100 { if done { break }; try? await Task.sleep(nanoseconds: 100_000_000) }
+        task?.cancel(); task = nil
+        let phrase = VigilVoiceCommand.wakePhrase(in: text)
+        return ["kind": "synthetic file on-device recognition", "name": name, "locale": locale, "available": true,
+            "finished": done, "syntheticTranscript": text, "error": failure,
+            "wakeDetected": phrase != nil, "commandDetected": phrase.flatMap { VigilVoiceCommand.parse($0) } != nil]
+    }
 }
 
 /// Keeps levels only, never audio recordings or private transcripts.

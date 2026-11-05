@@ -5,6 +5,12 @@ import FoundationNetworking
 #endif
 
 final class VoiceVisionTests: XCTestCase {
+    func testContinuousRecognitionFindsNewNameAfterBackgroundSpeech() {
+        XCTAssertEqual(VigilVoiceCommand.wakePhrase(in: "Some earlier conversation. Virgil, what is this?"), "virgil what is this")
+        XCTAssertEqual(VigilVoiceCommand.wakePhrase(in: "Vigil hello. Vigil, look at me"), "vigil look at me")
+        XCTAssertNil(VigilVoiceCommand.wakePhrase(in: "The visual design of the village"))
+        XCTAssertNil(VigilVoiceCommand.wakePhrase(in: "Please tell Rachel about the meeting"))
+    }
     func testPhoneticWakeOnlyAtStartAndManualCommandWindow() {
         for name in ["Vigil", "Virgil", "Vigils", "Vigel", "Vidjil", "Visual", "Rachel", "Vigill", "Vigl"] {
             XCTAssertTrue(VigilVoiceCommand.hasWakeWord(name), name)

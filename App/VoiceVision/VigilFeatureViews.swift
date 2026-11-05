@@ -1,5 +1,9 @@
 #if VIGIL_VOICE_VISION
 import SwiftUI
+#if os(macOS)
+import AppKit
+import Carbon
+#endif
 
 struct VigilAnswerBubble: View {
     @ObservedObject private var controller = VoiceVisionController.shared
@@ -12,13 +16,78 @@ struct VigilAnswerBubble: View {
                 if controller.busy { Button("Cancel") { controller.cancel() } }
                 else { Button { controller.dismissAnswer() } label: { Image(systemName: "xmark") }.accessibilityLabel("Dismiss answer") }
             }
-            if !controller.answer.isEmpty { Text(controller.answer).font(.callout).fixedSize(horizontal: false, vertical: true) }
+            if controller.voiceNeedsPermission { VigilVoicePermissionCard() }
+            else if controller.showShortcutCard {
+                Label("Press \(controller.hotKeyLabel) to speak", systemImage: "keyboard").font(.headline)
+                Text("Or click my face. Change the shortcut in Settings.").font(.caption)
+            }
+            else if !controller.answer.isEmpty { Text(controller.answer).font(.callout).fixedSize(horizontal: false, vertical: true) }
             if !controller.status.isEmpty { Text(controller.status).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
         }.padding(14).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(.primary.opacity(0.1), lineWidth: 0.5))
             .accessibilityElement(children: .contain)
     }
 }
+
+struct VigilVoicePermissionCard: View {
+    @ObservedObject private var controller = VoiceVisionController.shared
+    @State private var requesting = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Let Vigil hear you", systemImage: "mic").font(.headline)
+            Text(controller.permissionMessage).font(.callout).fixedSize(horizontal: false, vertical: true)
+            Button("Allow") {
+                requesting = true
+                Task { await controller.allowVoice(); requesting = false }
+            }.buttonStyle(.borderedProminent).disabled(requesting).accessibilityIdentifier("features.allowVoice")
+        }.padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+#if os(macOS)
+struct VigilHotKeySheet: View {
+    @ObservedObject private var controller = VoiceVisionController.shared
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Change listen shortcut").font(.title2.weight(.semibold))
+            Text("Press a new combination with Control, Option or Command.")
+            VigilHotKeyRecorder { event in
+                if event.keyCode == 53 { dismiss(); return }
+                var modifiers: UInt32 = 0
+                let flags = event.modifierFlags
+                if flags.contains(.control) { modifiers |= UInt32(controlKey) }
+                if flags.contains(.option) { modifiers |= UInt32(optionKey) }
+                if flags.contains(.shift) { modifiers |= UInt32(shiftKey) }
+                if flags.contains(.command) { modifiers |= UInt32(cmdKey) }
+                let key = event.keyCode == 49 ? "Space" : (event.charactersIgnoringModifiers ?? "").uppercased()
+                guard !key.isEmpty else { return }
+                let label = (flags.contains(.control) ? "⌃" : "") + (flags.contains(.option) ? "⌥" : "") + (flags.contains(.shift) ? "⇧" : "") + (flags.contains(.command) ? "⌘" : "") + key
+                if controller.changeHotKey(code: UInt32(event.keyCode), modifiers: modifiers, label: label) { dismiss() }
+            }.frame(height: 50).overlay(RoundedRectangle(cornerRadius: 10).stroke(.secondary.opacity(0.3)))
+            Text(controller.hotKeyMessage).font(.caption).foregroundStyle(.secondary)
+            HStack { Spacer(); Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
+        }.padding(24).frame(width: 400)
+    }
+}
+
+private struct VigilHotKeyRecorder: NSViewRepresentable {
+    let received: (NSEvent) -> Void
+    func makeNSView(context: Context) -> KeyView { let view = KeyView(); view.received = received; return view }
+    func updateNSView(_ view: KeyView, context: Context) { view.received = received }
+    final class KeyView: NSView {
+        var received: ((NSEvent) -> Void)?
+        override var acceptsFirstResponder: Bool { true }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); window?.makeFirstResponder(self) }
+        override func keyDown(with event: NSEvent) { received?(event) }
+        override func performKeyEquivalent(with event: NSEvent) -> Bool { received?(event); return true }
+        override func draw(_ dirtyRect: NSRect) {
+            let text = "Type shortcut here" as NSString
+            text.draw(at: NSPoint(x: 16, y: 16), withAttributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.secondaryLabelColor])
+        }
+    }
+}
+#endif
 
 struct VigilVoiceBar: View {
     @ObservedObject private var controller = VoiceVisionController.shared
@@ -64,6 +133,7 @@ struct VigilFeatureSettings: View {
     @AppStorage("vigil.voice.identifier") private var voice = ""
     @AppStorage("vigil.voice.volume") private var volume = 0.5
     @AppStorage("vigil.camera.keepClips") private var keepClips = false
+    @State private var changingHotKey = false
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Nudges, voice and vision").font(.headline)
@@ -84,12 +154,30 @@ struct VigilFeatureSettings: View {
             }
             Text("Apple's installed voices are free. Short nudges say ‘Back to it’, ‘Focus’ or ‘One thing’. Silence mode turns speech off.").font(.caption).foregroundStyle(.secondary)
             Text("Volume controls both chime and speech. Zero means silent. Colour flash uses your companion colour.").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button("Sound check") { controller.soundCheck() }
+                    .disabled(controller.soundCheckRunning).accessibilityIdentifier("features.soundCheck")
+                Text(controller.soundCheckRunning ? "Checking…" : "Chime, then ‘Vigil here.’").font(.caption).foregroundStyle(.secondary)
+            }
+            #if os(macOS)
+            Text("Output: \(controller.audioOutputName)").font(.caption).foregroundStyle(.secondary)
+            #endif
+            ProgressView(value: min(1, Double(wake.inputPeak) * 8)) {
+                Text(wake.listening ? "Microphone level" : "Microphone off").font(.caption)
+            }.accessibilityIdentifier("features.microphoneLevel")
+            if !controller.soundCheckMessage.isEmpty { Text(controller.soundCheckMessage).font(.caption).fixedSize(horizontal: false, vertical: true) }
             Divider()
+            if controller.voiceNeedsPermission { VigilVoicePermissionCard() }
             Toggle("Listen for ‘Vigil’ on this device", isOn: Binding(get: { controller.enabled }, set: controller.setListening))
             Text(wake.message).font(.caption).foregroundStyle(.secondary)
             Button("Restart listening") { wake.stop(); controller.resumeListening() }.disabled(!controller.enabled || controller.busy)
             #if os(macOS)
-            Text("Option+Space works from any app. Click Vigil’s face to listen without saying its name; Option-drag still moves the face.").font(.caption)
+            HStack {
+                Text("Listen shortcut"); Spacer(); Text(controller.hotKeyLabel).font(.body.monospaced().weight(.medium))
+                Button("Change") { changingHotKey = true }.accessibilityIdentifier("features.changeHotkey")
+            }.sheet(isPresented: $changingHotKey) { VigilHotKeySheet() }
+            Text(controller.hotKeyMessage).font(.caption).foregroundStyle(.secondary)
+            Text("\(controller.hotKeyLabel) works from any app. Click Vigil’s face to listen; Option-drag moves the face.").font(.caption)
             Text("Say ‘Vigil, what is this?’ to read the item under your pointer. Accessibility text comes first; otherwise only a small crop is sent. Protected work screens are skipped.").font(.caption)
             #else
             Text("Wake listening works while Vigil is open. iPhone and iPad cannot read other apps or the Mac pointer. For that, speak to Vigil on the Mac.").font(.caption)
@@ -101,7 +189,7 @@ struct VigilFeatureSettings: View {
             Button("Feature introduction and permissions") { controller.showIntroduction = true }
             VigilSupportSettings()
             VigilVoiceBar()
-        }
+        }.onAppear { controller.refreshVoicePermissions() }
     }
 }
 
@@ -146,6 +234,12 @@ struct VigilFeatureIntroduction: View {
                     Image(systemName: Self.cards[page].1).font(.system(size: 38)).foregroundStyle(Color(hex: Palette.gradient[2]))
                     Text(Self.cards[page].0).font(.largeTitle.weight(.semibold))
                     Text(Self.cards[page].2).font(.title3).fixedSize(horizontal: false, vertical: true)
+                    #if os(macOS)
+                    if page == 0 {
+                        Label("Press \(controller.hotKeyLabel) or click my face to speak.", systemImage: "keyboard")
+                        Text("Change the shortcut in Settings.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    #endif
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
             }
             HStack {
@@ -175,12 +269,7 @@ struct VigilFaceEffects: ViewModifier {
                 .offset(y: !reduceMotion && controller.effect == .bounce ? -abs(wave) * 18 : 0)
                 .overlay {
                     Group {
-                    if (age >= 0 && age < 2 && controller.effect == .colourFlash) || (reduceMotion && age >= 0 && age < 1.6 && (controller.effect == .bounce || controller.effect == .eyeWiggle)) || (reduceMotion && burst >= 0 && burst < 0.8) {
-                        let opacity = reduceMotion ? 0.9 : 0.45 + 0.55 * abs(cos(age * .pi * 2))
-                        RoundedRectangle(cornerRadius: 28).fill(Color(hex: Palette.gradient[0]).opacity(opacity * 0.32)).padding(5)
-                        RoundedRectangle(cornerRadius: 28).stroke(Color.white.opacity(opacity), lineWidth: 10).padding(7)
-                        RoundedRectangle(cornerRadius: 28).stroke(Color(hex: Palette.gradient[1]).opacity(opacity), lineWidth: 6).padding(7)
-                    }
+                    // The face Canvas draws the masked glow; this overlay holds particles only.
                     if !reduceMotion && burst >= 0 && burst < 1.1 {
                         Canvas { context, size in
                             for index in 0..<14 {

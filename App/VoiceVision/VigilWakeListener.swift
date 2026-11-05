@@ -22,7 +22,23 @@ import AVFoundation
     private var wakeShown = false
     private var lastCommand: VigilVoiceCommand?
     private(set) var wakeCount = 0
-    private(set) var inputPeak: Float = 0
+    @Published private(set) var inputPeak: Float = 0
+    private(set) var inputBuffers = 0
+    private(set) var maximumInputPeak: Float = 0
+    private(set) var localeIdentifier = ""
+    private(set) var lastError = ""
+    private var routeObserver: NSObjectProtocol?
+
+    static var availableRecognizer: SFSpeechRecognizer? {
+        ["en-GB", "en-US"].compactMap { SFSpeechRecognizer(locale: Locale(identifier: $0)) }
+            .first { $0.isAvailable && $0.supportsOnDeviceRecognition }
+    }
+    static var availability: [[String: Any]] {
+        ["en-GB", "en-US"].map { locale in
+            let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale))
+            return ["locale": locale, "available": recognizer?.isAvailable ?? false, "onDevice": recognizer?.supportsOnDeviceRecognition ?? false]
+        }
+    }
 
     func arm() {
         armedUntil = Date().addingTimeInterval(10)
@@ -37,12 +53,13 @@ import AVFoundation
               AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
             message = "Enable Microphone and Speech Recognition in the introduction."; return
         }
-        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-GB")),
-              recognizer.isAvailable, recognizer.supportsOnDeviceRecognition else {
-            message = "On-device English speech is unavailable. Use the buttons instead."; return
+        guard let recognizer = Self.availableRecognizer else {
+            message = "On-device English speech is unavailable for en-GB and en-US. Download English Dictation in macOS Keyboard settings, then restart listening."; return
         }
         let token = generation
         self.recognizer = recognizer
+        localeIdentifier = recognizer.locale.identifier; lastError = ""
+        inputBuffers = 0; inputPeak = 0; maximumInputPeak = 0
         do {
             #if os(iOS)
             try AVAudioSession.sharedInstance().setCategory(.record, mode: .measurement, options: [])
@@ -52,19 +69,21 @@ import AVFoundation
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.requiresOnDeviceRecognition = true
             request.shouldReportPartialResults = true
-            request.contextualStrings = ["Vigil"]
+            request.contextualStrings = ["Vigil", "Virgil", "Vigil what is this", "Vigil look at me"]
+            request.taskHint = .confirmation
             self.request = request; delivered = false; wakeShown = false; lastCommand = nil
             recognition = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 Task { @MainActor in
                     guard let self, self.generation == token else { return }
                     if let result, !self.delivered {
                         let transcript = result.bestTranscription.formattedString
-                        let heardName = VigilVoiceCommand.hasWakeWord(transcript)
+                        let phrase = VigilVoiceCommand.wakePhrase(in: transcript)
+                        let heardName = phrase != nil
                         if heardName && !self.wakeShown {
                             self.wakeShown = true; self.wakeCount += 1
                             self.armedUntil = Date().addingTimeInterval(10); self.onWake?()
                         }
-                        let command = VigilVoiceCommand.parse(transcript, requiresWakeWord: Date() >= self.armedUntil)
+                        let command = VigilVoiceCommand.parse(phrase ?? transcript, requiresWakeWord: Date() >= self.armedUntil)
                         if let command, command != self.lastCommand {
                             self.lastCommand = command; self.debounce?.cancel()
                             self.debounce = Task { @MainActor [weak self] in
@@ -75,6 +94,10 @@ import AVFoundation
                         } else if command == nil {
                             self.lastCommand = nil; self.debounce?.cancel(); self.debounce = nil
                         }
+                    }
+                    if let error {
+                        let failure = error as NSError
+                        self.lastError = "\(failure.domain) \(failure.code)"
                     }
                     if (error != nil || result?.isFinal == true), self.lastCommand == nil {
                         self.stop()
@@ -93,21 +116,40 @@ import AVFoundation
                 if let data = buffer.floatChannelData?[0] {
                     var peak: Float = 0
                     for index in 0..<Int(buffer.frameLength) { peak = max(peak, abs(data[index])) }
-                    Task { @MainActor [weak self] in self?.inputPeak = peak }
+                    Task { @MainActor [weak self] in
+                        guard let self, self.generation == token else { return }
+                        self.inputBuffers += 1; self.maximumInputPeak = max(self.maximumInputPeak, peak)
+                        if self.inputBuffers.isMultiple(of: 5) {
+                            self.inputPeak = peak
+                            if self.inputBuffers > 150 && self.maximumInputPeak < 0.00001 {
+                                self.message = "Microphone is delivering silence. Check macOS Sound → Input and speak near the selected mic."
+                            }
+                        }
+                    }
                 }
             }
             tapped = true; engine.prepare(); try engine.start()
-            listening = true; message = "Listening on-device for ‘Vigil’ · microphone on"
+            listening = true; message = "Listening on-device for ‘Vigil’ or ‘Virgil’ · \(localeIdentifier)"
+            routeObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }; self.stop()
+                    if VoiceVisionController.shared.enabled { self.start() }
+                }
+            }
             // Recognition sessions are bounded. Rotate rather than holding an expired task.
             rotation = Task { @MainActor [weak self] in
                 do { try await Task.sleep(nanoseconds: 50_000_000_000) } catch { return }
                 guard let self, self.generation == token else { return }
                 self.stop(); self.start()
             }
-        } catch { stop(); message = "The microphone is busy. Use the buttons or try Listen again." }
+        } catch {
+            stop(); let failure = error as NSError; lastError = "\(failure.domain) \(failure.code)"
+            message = "Microphone unavailable (\(failure.code)). Check macOS Sound → Input, then Restart listening."
+        }
     }
     func stop() {
         generation = UUID(); debounce?.cancel(); debounce = nil; rotation?.cancel(); rotation = nil
+        if let routeObserver { NotificationCenter.default.removeObserver(routeObserver) }; routeObserver = nil
         engine?.stop()
         if tapped { engine?.inputNode.removeTap(onBus: 0); tapped = false }
         request?.endAudio(); recognition?.cancel(); recognition = nil; request = nil; recognizer = nil; engine = nil; listening = false

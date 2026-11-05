@@ -1,0 +1,64 @@
+Mac audio and shortcut repair — build 10
+
+Default global listen shortcut: Control+Option+V. It is shown in Settings with
+Change, on the face's welcome card, and on the first introduction card. Changes
+check system symbolic hotkeys and use exclusive Carbon registration, keeping
+the previous key if a candidate cannot be registered. Normal launches no longer
+register Option+Space. The new --vigil-audio-check is the current hardware check;
+the historical --vigil-nudge-check still contains its old Option+Space test and
+must not be used on a machine with competing launchers.
+
+The chosen-colour glow is drawn inside the face Canvas, clipped to the exact
+animated BlobShape rather than the panel rectangle. It pulses three times in
+2.4 seconds. Real native own-window view captures were visually inspected;
+these are not independent WindowServer screenshots. The Settings bitmap is
+blank and is not accepted as visual evidence, although its real Sound check
+button was successfully pressed through the app's accessibility tree and its
+Change control was present.
+
+Voice permissions are queried without prompting at launch, hotkey activation
+or Sound check. A single Allow card requests Microphone then Speech Recognition
+only after a click. Previously denied access opens the relevant system privacy
+pane. Existing grants were both authorised in the installed app; no permission
+reset or overnight system prompt was needed. Both Info.plist usage descriptions
+and the signed audio-input entitlement were verified. The app is not sandboxed.
+
+Wake recognition checks on-device en-GB, then en-US availability. Contextual
+strings include Vigil and Virgil. Continuous transcripts can find a fresh name
+after earlier conversation, and input levels/errors are visible. Microphone
+route changes restart the listener. No cloud speech fallback is used.
+
+Speech callback buffers are copied before crossing queues, preserving their
+contents and order. Chime and rendered speech explicitly select the current
+default output UID and apply the app volume. Settings Sound check plays the
+chime, says Vigil here, and shows a live microphone meter, route and result.
+
+On this test Mac, the built-in microphone delivered only zeros because the
+MacBook lid was confirmed closed. Apple documents the hardware microphone
+disconnect for closed Apple silicon MacBook lids. The attached C922 microphone
+was selected as default input. Its initial 40% level produced intermittent
+synthetic Vigil detection; Virgil passed. A final 65% input-level check passed
+both real speaker-to-microphone names and complete what-is-this commands with
+healthy, unclipped peaks. The 65% input level was retained. This is synthetic
+speech played through real hardware, not a claim Keith personally spoke tonight.
+
+The final installed check also passed real on-device file recognition of both
+names in both en-GB and en-US. Permissions were authorised; output was MacBook
+Pro Speakers at the existing 58.39%, unmuted, and app volume 50%. Both players
+remained isPlaying while their playheads advanced and meters showed signal;
+the default output device was running. This uses the explicitly requested
+player/device alternative to loopback, not an independently recorded audible
+waveform. No headphone route or future device switch was physically tested.
+
+47 portable core tests passed on Contabo, plus macOS Swift syntax and edition
+isolation. Native Mac Release succeeded on the sole permitted retry after a
+glow-variable naming clash in attempt one. No local iOS/simulator build ran.
+The previous build 9 was backed up to a verified ZIP; /Applications/Vigil.app
+is the sole Keith app bundle in audited internal roots. Its exact Dock pin is
+retained and remaining pins keep their relative order. A separate Sermo Voice
+pin disappeared during this interval; no Dock write was performed by this task,
+and the unrelated change was left intact. Dedicated dd-tonight was deleted. Vigil was
+ordinarily relaunched without proof arguments. No Git push was requested/run.
+
+Apple hardware reference:
+https://support.apple.com/en-gb/guide/security/secbbd20b00b/web

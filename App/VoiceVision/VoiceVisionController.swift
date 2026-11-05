@@ -21,6 +21,14 @@ import Carbon
     @Published var effect: VigilNudgeStyle = .bounce
     @Published var effectAt = Date.distantPast
     @Published var answeredAt = Date.distantPast
+    @Published var voiceNeedsPermission = false
+    @Published var permissionMessage = ""
+    @Published var soundCheckRunning = false
+    @Published var soundCheckMessage = ""
+    @Published var audioOutputName = "Default output"
+    @Published var hotKeyLabel = "⌃⌥V"
+    @Published var hotKeyMessage = ""
+    @Published var showShortcutCard = false
     let wake = VigilWakeListener()
     private var job: Task<Void, Never>?
     private var generation = UUID()
@@ -32,6 +40,7 @@ import Carbon
     private var hotKeyHandler: EventHandlerRef?
     #endif
     private var listeningBubble: Task<Void, Never>?
+    private var soundCheckTask: Task<Void, Never>?
     private(set) var manualStartCount = 0
     var enabled: Bool {
         UserDefaults.standard.bool(forKey: "vigil.voice.wake") && UserDefaults.standard.bool(forKey: "vigil.voice.introduced")
@@ -47,7 +56,11 @@ import Carbon
         VigilSupportController.shared.start()
         #if os(macOS)
         installHotKey()
+        audioOutputName = VigilAudioRoute.snapshot().name
+        showShortcutCard = !UserDefaults.standard.bool(forKey: "vigil.hotkey.welcome10")
         #endif
+        refreshVoicePermissions()
+        if (enabled && voiceNeedsPermission) || showShortcutCard { updateBubble() }
         resumeListening()
     }
     func setForeground(_ value: Bool) {
@@ -64,7 +77,8 @@ import Carbon
         #if os(iOS)
         guard foreground else { return }
         #endif
-        guard enabled, !busy, !VigilVoiceOutput.shared.speaking, !Self.proofMode else { return }
+        refreshVoicePermissions()
+        guard enabled, !voiceNeedsPermission, !soundCheckRunning, !busy, !VigilVoiceOutput.shared.speaking, !Self.proofMode else { return }
         wake.start()
     }
     func pauseForSpeech() { wake.stop() }
@@ -72,19 +86,14 @@ import Carbon
         guard !VigilEdition.macy, !Self.proofMode, !busy else { return }
         manualStartCount += 1
         VigilVoiceOutput.shared.stop()
-        Task { @MainActor in
-            if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined { _ = await AVCaptureDevice.requestAccess(for: .audio) }
-            if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
-                _ = await withCheckedContinuation { (c: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
-                    SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) }
-                }
-            }
-            wake.arm()
-            if !wake.listening { status = wake.message; updateBubble() }
-        }
+        refreshVoicePermissions()
+        guard !voiceNeedsPermission else { updateBubble(); return }
+        wake.arm()
+        if !wake.listening { status = wake.message; updateBubble() }
     }
     func showListening() {
         guard !busy else { return }
+        showShortcutCard = false
         answer = ""; status = "Listening…"; updateBubble()
         listeningBubble?.cancel()
         listeningBubble = Task { @MainActor [weak self] in
@@ -96,6 +105,8 @@ import Carbon
     }
     #if os(macOS)
     private(set) var hotKeyStatus: OSStatus = -1
+    var hotKeyCode: UInt32 { UInt32(UserDefaults.standard.object(forKey: "vigil.hotkey.code") as? Int ?? kVK_ANSI_V) }
+    var hotKeyModifiers: UInt32 { UInt32(UserDefaults.standard.object(forKey: "vigil.hotkey.modifiers") as? Int ?? (controlKey | optionKey)) }
     func installHotKey() {
         guard hotKeyHandler == nil else { return }
         var event = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -104,34 +115,105 @@ import Carbon
             return noErr
         }, 1, &event, nil, &hotKeyHandler)
         guard handlerStatus == noErr else { hotKeyStatus = handlerStatus; return }
-        hotKeyStatus = RegisterEventHotKey(UInt32(kVK_Space), UInt32(optionKey), EventHotKeyID(signature: 0x5649474C, id: 1), GetApplicationEventTarget(), 0, &hotKey)
+        hotKeyLabel = UserDefaults.standard.string(forKey: "vigil.hotkey.label") ?? "⌃⌥V"
+        hotKeyStatus = RegisterEventHotKey(hotKeyCode, hotKeyModifiers, EventHotKeyID(signature: 0x5649474C, id: 1), GetApplicationEventTarget(), UInt32(kEventHotKeyExclusive), &hotKey)
+        hotKeyMessage = hotKeyStatus == noErr ? "Available · registered for Vigil" : "Shortcut unavailable. Choose Change."
+    }
+    func changeHotKey(code: UInt32, modifiers: UInt32, label: String) -> Bool {
+        guard modifiers & UInt32(controlKey | optionKey | cmdKey) != 0 else { hotKeyMessage = "Include Control, Option or Command."; return false }
+        if code == hotKeyCode && modifiers == hotKeyModifiers { return true }
+        var systemKeys: Unmanaged<CFArray>?
+        if CopySymbolicHotKeys(&systemKeys) == noErr, let keys = systemKeys?.takeRetainedValue() as? [[String: Any]],
+           keys.contains(where: { ($0[kHISymbolicHotKeyEnabled as String] as? Bool == true) && ($0[kHISymbolicHotKeyCode as String] as? UInt32 == code) && ($0[kHISymbolicHotKeyModifiers as String] as? UInt32 == modifiers) }) {
+            hotKeyMessage = "macOS already uses those keys. Choose another shortcut."; return false
+        }
+        var candidate: EventHotKeyRef?
+        let result = RegisterEventHotKey(code, modifiers, EventHotKeyID(signature: 0x5649474C, id: 1), GetApplicationEventTarget(), UInt32(kEventHotKeyExclusive), &candidate)
+        guard result == noErr else { hotKeyMessage = "Another app uses those keys. Choose another shortcut."; return false }
+        if let hotKey { UnregisterEventHotKey(hotKey) }
+        hotKey = candidate; hotKeyStatus = result; hotKeyLabel = label
+        UserDefaults.standard.set(Int(code), forKey: "vigil.hotkey.code")
+        UserDefaults.standard.set(Int(modifiers), forKey: "vigil.hotkey.modifiers")
+        UserDefaults.standard.set(label, forKey: "vigil.hotkey.label")
+        hotKeyMessage = "Available · registered for Vigil"; return true
     }
     #endif
+    func refreshVoicePermissions() {
+        let mic = AVCaptureDevice.authorizationStatus(for: .audio), speech = SFSpeechRecognizer.authorizationStatus()
+        let missing = mic != .authorized || speech != .authorized
+        if voiceNeedsPermission != missing { voiceNeedsPermission = missing }
+        let message = mic == .denied || speech == .denied
+            ? "Voice access is off in macOS privacy settings. Allow opens the permission that needs changing."
+            : "Allow Microphone and Speech Recognition so Vigil can hear its name on this device."
+        if permissionMessage != message { permissionMessage = message }
+    }
+    /// Only the visible Allow button calls this. Launch, shortcuts and tests never prompt.
+    func allowVoice() async {
+        guard !Self.proofMode else { return }
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined { _ = await AVCaptureDevice.requestAccess(for: .audio) }
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized && SFSpeechRecognizer.authorizationStatus() == .notDetermined {
+            _ = await withCheckedContinuation { (c: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
+                SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) }
+            }
+        }
+        refreshVoicePermissions()
+        #if os(macOS)
+        if AVCaptureDevice.authorizationStatus(for: .audio) == .denied {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
+        } else if SFSpeechRecognizer.authorizationStatus() == .denied {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")!)
+        }
+        #endif
+        if !voiceNeedsPermission {
+            UserDefaults.standard.set(true, forKey: "vigil.voice.introduced")
+            UserDefaults.standard.set(true, forKey: "vigil.voice.wake")
+            showIntroduction = false; status = ""; updateBubble(); resumeListening()
+        }
+    }
+    func soundCheck() {
+        guard !soundCheckRunning, !Self.proofMode else { return }
+        refreshVoicePermissions()
+        soundCheckRunning = true; soundCheckMessage = "Chime, then ‘Vigil here.’"
+        #if os(macOS)
+        audioOutputName = VigilAudioRoute.snapshot().name
+        #endif
+        wake.stop(); VigilVoiceOutput.shared.stop()
+        if !voiceNeedsPermission { wake.start() }
+        soundCheckTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            #if os(macOS)
+            VigilChime.shared.play()
+            #else
+            VigilChirp.shared.play()
+            #endif
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            VigilVoiceOutput.shared.speak("Vigil here.", entireLine: true, audition: true)
+            for _ in 0..<100 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                if !VigilVoiceOutput.shared.speaking { break }
+            }
+            #if os(macOS)
+            let route = VigilAudioRoute.snapshot()
+            self.soundCheckMessage = route.muted == true ? "Output is muted in macOS."
+                : route.volume == 0 ? "Output volume is zero in macOS."
+                : VigilVoiceOutput.shared.playerStarted ? "Finished on \(route.name)." : "Speech playback failed. Try another Apple voice."
+            #else
+            self.soundCheckMessage = "Sound check finished."
+            #endif
+            if self.voiceNeedsPermission { self.soundCheckMessage += " Allow voice access to check the microphone." }
+            else if self.wake.inputPeak < 0.00001 { self.soundCheckMessage += " No microphone signal: check the input and speak near the mic." }
+            self.soundCheckRunning = false
+            if !self.enabled { self.wake.stop() }
+            self.resumeListening()
+        }
+    }
     func setListening(_ value: Bool) {
         if value, !UserDefaults.standard.bool(forKey: "vigil.voice.introduced") { showIntroduction = true; return }
         UserDefaults.standard.set(value, forKey: "vigil.voice.wake")
         if value { resumeListening() } else { wake.stop() }
     }
     func enablePermissions() async {
-        guard !Self.proofMode else { return }
-        if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined { _ = await AVCaptureDevice.requestAccess(for: .audio) }
-        if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
-            _ = await withCheckedContinuation { (c: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
-                SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) }
-            }
-        }
-        #if os(macOS)
-        // System privacy grants remain under the owner's control. Never loop the prompts.
-        if !UserDefaults.standard.bool(forKey: "vigil.voice.macPermissionRequest") {
-            UserDefaults.standard.set(true, forKey: "vigil.voice.macPermissionRequest")
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-            _ = AXIsProcessTrustedWithOptions(options)
-            if !CGPreflightScreenCaptureAccess() { _ = CGRequestScreenCaptureAccess() }
-        }
-        #endif
-        UserDefaults.standard.set(true, forKey: "vigil.voice.introduced")
-        UserDefaults.standard.set(true, forKey: "vigil.voice.wake")
-        showIntroduction = false; resumeListening()
+        await allowVoice()
     }
     func skipIntroduction() {
         UserDefaults.standard.set(true, forKey: "vigil.voice.introduced")
@@ -143,7 +225,10 @@ import Carbon
         wake.stop()
         updateBubble()
     }
-    func dismissAnswer() { answer = ""; status = ""; updateBubble() }
+    func dismissAnswer() {
+        answer = ""; status = ""; showShortcutCard = false
+        UserDefaults.standard.set(true, forKey: "vigil.hotkey.welcome10"); updateBubble()
+    }
     func ask(_ command: VigilVoiceCommand) {
         guard !VigilEdition.macy, !Self.proofMode, !busy else { return }
         switch command {
@@ -269,14 +354,14 @@ import Carbon
     func updateBubble() {
         #if os(macOS)
         guard let face = VigilCharacterHost.shared.panel else { return }
-        if answer.isEmpty && status.isEmpty { bubble?.orderOut(nil); return }
+        if answer.isEmpty && status.isEmpty && !voiceNeedsPermission && !showShortcutCard { bubble?.orderOut(nil); return }
         let panel = bubble ?? NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = "Vigil answer"; panel.isOpaque = false; panel.backgroundColor = .clear
         panel.level = .floating; panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentView = NSHostingView(rootView: VigilAnswerBubble().frame(width: 310))
         let area = face.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? face.frame
-        let height: CGFloat = 128
+        let height: CGFloat = voiceNeedsPermission ? 200 : 128
         let y = face.frame.maxY + height + 8 <= area.maxY ? face.frame.maxY + 8 : face.frame.minY - height - 8
         panel.setFrame(CGRect(x: min(area.maxX - 310, max(area.minX, face.frame.midX - 155)), y: max(area.minY, y), width: 310, height: height), display: true)
         panel.orderFrontRegardless(); bubble = panel

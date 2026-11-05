@@ -20,6 +20,16 @@ public enum VigilVoiceCommand: Equatable, Sendable {
     case stuck(String)
     case remind(minutes: Int, text: String)
 
+    /// Continuous recognition includes earlier conversation. Only an explicit name
+    /// starts a new wake phrase there; loose aliases remain limited to the first word.
+    public static func wakePhrase(in transcript: String) -> String? {
+        let words = transcript.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        if let index = words.lastIndex(where: { ["vigil", "virgil", "vigils", "vigel", "vidjil"].contains($0) }) {
+            return words[index...].joined(separator: " ")
+        }
+        return hasWakeWord(transcript) ? transcript : nil
+    }
+
     /// Only the first, separate word can wake Vigil. Keep phonetic tolerance bounded.
     public static func hasWakeWord(_ transcript: String) -> Bool {
         guard let word = transcript.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).first else { return false }

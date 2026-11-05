@@ -189,13 +189,23 @@ struct FaceView: View {
         TimelineView(.animation) { timeline in
             Canvas { ctx, size in
                 var frame = animator.step(timeline.date.timeIntervalSinceReferenceDate)
+                var glow: Double = 0
                 #if VIGIL_VOICE_VISION
                 let age=timeline.date.timeIntervalSince(features.effectAt)
+                let answerAge = timeline.date.timeIntervalSince(features.answeredAt)
+                if features.effect == .colourFlash && age >= 0 && age < 2.4 {
+                    // Three soft pulses, returning completely to rest between them.
+                    glow = pow(sin(age / 2.4 * .pi * 3), 2)
+                } else if reduceMotion && age >= 0 && age < 1.6 && (features.effect == .bounce || features.effect == .eyeWiggle) {
+                    glow = sin(age / 1.6 * .pi) * 0.65
+                } else if reduceMotion && answerAge >= 0 && answerAge < 0.8 {
+                    glow = sin(answerAge / 0.8 * .pi) * 0.65
+                }
                 if features.effect == .eyeWiggle,age >= 0,age < 1.6,!reduceMotion {
                     frame.gaze.x += sin(age * .pi * 8) * 0.65 * (1-age/1.6)
                 }
                 #endif
-                FaceView.draw(frame, in: &ctx, size: size, transparent: transparent)
+                FaceView.draw(frame, in: &ctx, size: size, transparent: transparent, glow: glow)
             }
         }
         .background(transparent ? Color.clear : Color.black)
@@ -213,7 +223,7 @@ struct FaceView: View {
                                              startRadius: 0, endRadius: 243))
     }
 
-    static func draw(_ f: FaceAnimator.Frame, in ctx: inout GraphicsContext, size: CGSize, transparent: Bool = false) {
+    static func draw(_ f: FaceAnimator.Frame, in ctx: inout GraphicsContext, size: CGSize, transparent: Bool = false, glow: Double = 0) {
         if !transparent { ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black)) }
 
         let scale = max(size.width / design.width, size.height / design.height)
@@ -232,9 +242,9 @@ struct FaceView: View {
 
         let blob = BlobShape.path(in: body)
 
-        var glow = ctx
-        glow.addFilter(.blur(radius: 24))
-        glow.fill(blob, with: .color(Color(hex: Palette.berry2, opacity: 0.5)))
+        var ambientGlow = ctx
+        ambientGlow.addFilter(.blur(radius: 24))
+        ambientGlow.fill(blob, with: .color(Color(hex: Palette.berry2, opacity: 0.5)))
         ctx.fill(blob, with: .color(Color(hex: Palette.berry3)))
 
         ctx.fill(blob, with: BlobShape.fill(in: body))
@@ -246,6 +256,20 @@ struct FaceView: View {
         // A little glossy sparkle on his head.
         shine.fill(Path(ellipseIn: CGRect(x: body.minX + 190, y: body.minY + 40, width: 46, height: 22)),
                    with: .color(.white.opacity(0.35)))
+
+        // Draw inside the exact face outline and its animated transform. The
+        // panel's rectangular bounds never become part of the colour effect.
+        if glow > 0 {
+            var ring = ctx
+            ring.clip(to: blob)
+            let colour = Color(hex: Palette.gradient[1])
+            ring.fill(blob, with: .color(colour.opacity(glow * 0.16)))
+            var soft = ring
+            soft.addFilter(.blur(radius: 22))
+            soft.stroke(blob, with: .color(colour.opacity(glow * 0.95)), lineWidth: 54)
+            ring.stroke(blob, with: .color(colour.opacity(glow * 0.9)), lineWidth: 22)
+            ring.stroke(blob, with: .color(.white.opacity(glow * 0.5)), lineWidth: 7)
+        }
 
         let navy = Color(hex: Palette.nose)
         let ink = Color(hex: Palette.ink)

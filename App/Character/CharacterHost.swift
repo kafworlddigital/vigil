@@ -21,6 +21,7 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         #if VIGIL_VOICE_VISION
         VigilFeatureProof.begin()
         VigilFeatureProof.beginNudgeCheck()
+        VigilFeatureProof.beginRepairCheck()
         #endif
         let args=ProcessInfo.processInfo.arguments
         if let i=args.firstIndex(of:"--vigil-test-connections"),i+1<args.count {
@@ -60,8 +61,8 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         p.contentView=NSHostingView(rootView:FaceView(animator:animator,transparent:true)
             .contentShape(Rectangle())
             .onTapGesture { if !NSEvent.modifierFlags.contains(.option) { VoiceVisionController.shared.startManualListening() } }
-            .accessibilityLabel("Vigil face. Click to listen, or press Option Space.")
-            .help("Click to listen · Option+Space anywhere · Option-drag to move"))
+            .accessibilityLabel("Vigil face. Click to listen, or press \(VoiceVisionController.shared.hotKeyLabel).")
+            .help("Click to listen · \(VoiceVisionController.shared.hotKeyLabel) anywhere · Option-drag to move"))
         #else
         p.contentView=NSHostingView(rootView:FaceView(animator:animator,transparent:true))
         #endif
@@ -107,7 +108,7 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         resize()
     }
     func setVisible(_ show:Bool){UserDefaults.standard.set(show,forKey:"vigil.face.visible");if show{panel?.orderFrontRegardless()}else{panel?.orderOut(nil)}}
-    func showMoveHint(){cursor.view.caption="Click my face or press Option+Space to listen. Hold Option and drag to move me.";DispatchQueue.main.asyncAfter(deadline:.now()+7){[weak self] in self?.cursor.view.caption=nil}}
+    func showMoveHint(){cursor.view.caption="Click my face to listen. Hold Option and drag to move me.";DispatchQueue.main.asyncAfter(deadline:.now()+7){[weak self] in self?.cursor.view.caption=nil}}
     private func trackDrag(){
         guard let p=panel,visible else{return}
         let m=NSEvent.mouseLocation

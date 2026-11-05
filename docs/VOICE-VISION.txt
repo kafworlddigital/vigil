@@ -1,0 +1,52 @@
+Keith's Vigil voice and vision — source delivery
+
+Branch: features-voice-vision
+Base includes the Tuck/key repair on main (db4f322).
+Build candidate: 1.0 (7). This is a candidate number, not an installed release.
+
+Implemented source
+- Five selectable nudge outputs with individual Test buttons.
+- Free installed Apple speech voices, volume, mute and three short nudge lines.
+- Opt-in, on-device Apple recognition for "Vigil, what is this?" and "Vigil, look at me".
+- Mac pointer Accessibility text first; otherwise a bounded cursor crop through ScreenCaptureKit.
+- One short answer bubble with speech, native sparkle burst and supported-device haptics.
+- Explicit four-second camera/audio capture, visible recording indicator and Cancel.
+- Local speech transcription and three small frames sent through existing non-OpenAI failover.
+- Camera off before inference. Temporary media removed on completion, error or cancellation.
+- Keeping clips is off by default; previously opted-in saved clips remain when disabled.
+- Settings, six onboarding cards, feature Help and denied-permission messages.
+- iPhone/iPad voice and requested front-camera support while Vigil is foreground.
+  Apple platforms do not permit reading another iOS app or the Mac cursor from the phone.
+
+Edition boundary
+Only the Keith Mac and iOS targets define VIGIL_VOICE_VISION.
+Macy targets exclude App/VoiceVision and retain their existing capabilities and UI.
+Shared brain changes retain focus classification by default; question requests require a Keith token.
+The new question route refuses non-free OpenRouter model IDs and retains existing provider restrictions.
+No keys, tokens, private prompts or captures are committed. Screen privacy guards remain in place.
+
+Completed checks
+39 core regression tests on Contabo, isolated Linux Swift 6.0.3 harness.
+The harness uses official Swift Crypto in place of CryptoKit on Linux only.
+11 stateless-brain tests, including first-two-provider failures, visual questions and focus JSON validation.
+37 app/core Swift files pass syntax parsing only; this does not establish native type correctness.
+Keith/Macy feature-condition and source-exclusion checks pass.
+
+Delivery blocker
+GitHub API rejects native workflow dispatch with HTTP 422:
+"Actions has been disabled for this repository."
+Repository reports public/enabled and Actions permissions enabled, but creates no feature run.
+No native compilation, app launch, hardware validation, new installation or new preview is claimed.
+Do not install this candidate until a GitHub native build and release gates pass.
+No build was moved to Keith's Mac; no paid limit or account security setting was changed.
+
+Build continuation once GitHub Actions is available
+Use the existing registered workflow path on this feature ref:
+  gh workflow run keys-fix.yml --ref features-voice-vision
+Its feature-ref-only step captures and checks the native feature view previews after successful builds.
+The separate voice-vision.yml workflow also builds all four targets, checks brain tests and captures views.
+Cloud previews are explicitly labelled synthetic fixtures and muted; they prove rendering only.
+Native camera/microphone, on-device recognition, AX/crop boundaries, cancellation, hardware haptics,
+real short-question failover, physical phone/iPad screenshots and signed entitlement acceptance remain open.
+Preserve existing apps and vaults, sign with the existing identities, install Keith editions only,
+and independently inventory the exact Mac, iPhone and iPad before claiming delivery.

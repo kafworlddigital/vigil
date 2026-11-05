@@ -9,7 +9,10 @@ private struct VigilVoiceVisionIntegration: ViewModifier {
             .task { controller.start() }
             .sheet(isPresented: $controller.showIntroduction) { VigilFeatureIntroduction() }
             #if os(iOS)
-            .onChange(of: scenePhase) { _, phase in controller.setForeground(phase == .active) }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background { controller.setForeground(false) }
+                else if phase == .active { controller.setForeground(true) }
+            }
             #endif
     }
 }

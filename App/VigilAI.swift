@@ -106,7 +106,7 @@ enum VigilEdition {
     }
     private func brain(_ prompt:ModelPrompt,permitsSend:@escaping @Sendable () async -> Bool) async throws -> ModelReply? {
         guard let token=KeyVault.read(service:"com.kafworlddigital.vigil.brain"),await permitsSend() else{return nil}
-        var request=URLRequest(url:Self.brainURL.appendingPathComponent("answer"),timeoutInterval:180);request.httpMethod="POST"
+        var request=URLRequest(url:Self.brainURL.appendingPathComponent("answer"),timeoutInterval:prompt.purpose == .question ? 55 : 180);request.httpMethod="POST"
         request.setValue("Bearer \(token)",forHTTPHeaderField:"Authorization");request.setValue("application/json",forHTTPHeaderField:"Content-Type")
         var body:[String:Any]=["system":prompt.system,"text":prompt.text,"mime":prompt.mime]
         if prompt.purpose == .question { body["purpose"]="question" }

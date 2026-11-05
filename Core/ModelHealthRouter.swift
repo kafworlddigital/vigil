@@ -123,6 +123,7 @@ public actor ModelHealthRouter {
     }
     public func complete(_ prompt:ModelPrompt,permitsSend:@escaping @Sendable () async -> Bool = {true}) async throws -> ModelReply {
         let now=Date()
+        let deadline=prompt.purpose == .question ? now.addingTimeInterval(45) : Date.distantFuture
         let ordered=snapshot().compactMap { state -> ModelCandidate? in
             guard !state.resting(now),let candidate=candidates.first(where:{$0.id==state.id}),(!prompt.screen || candidate.vision),!(keys[candidate.provider] ?? "").isEmpty else { return nil }
             if prompt.purpose == .question && candidate.provider == "openrouter" && !candidate.model.hasSuffix(":free") { return nil }
@@ -130,8 +131,9 @@ public actor ModelHealthRouter {
         }
         for candidate in ordered {
             try Task.checkCancellation()
+            guard deadline.timeIntervalSinceNow >= 1 else { break }
             guard await permitsSend() else { throw RouterError.privateScreen }
-            let timeout:Double=20
+            let timeout:Double=min(20,max(1,deadline.timeIntervalSinceNow))
             do {
                 let request=try Self.request(candidate,prompt:prompt,key:keys[candidate.provider]!,session:sessionID,timeout:timeout,probe:false)
                 let sent=Date();let (data,response)=try await transport.data(for:request)

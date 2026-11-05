@@ -146,6 +146,7 @@ struct VigilFaceEffects: ViewModifier {
             content
                 .offset(y: !reduceMotion && controller.effect == .bounce ? -abs(wave) * 9 : 0)
                 .overlay {
+                    Group {
                     if (age >= 0 && age < 0.8 && controller.effect == .colourFlash) || (reduceMotion && burst >= 0 && burst < 0.8) {
                         RoundedRectangle(cornerRadius: 35).stroke(Color(hex: Palette.gradient[1]).opacity(0.7), lineWidth: 3).padding(4)
                     }
@@ -162,7 +163,8 @@ struct VigilFaceEffects: ViewModifier {
                             }
                         }
                     }
-                }.allowsHitTesting(false)
+                    }.allowsHitTesting(false)
+                }
         }
     }
 }

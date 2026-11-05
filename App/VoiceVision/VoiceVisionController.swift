@@ -116,6 +116,11 @@ import ApplicationServices
                 case .lookAtMe(let question):
                     if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined { _ = await AVCaptureDevice.requestAccess(for: .video) }
                     if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined { _ = await AVCaptureDevice.requestAccess(for: .audio) }
+                    if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
+                        _ = await withCheckedContinuation { (c: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
+                            SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) }
+                        }
+                    }
                     guard self.generation == token, !Task.isCancelled else { return }
                     guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized,
                           AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {

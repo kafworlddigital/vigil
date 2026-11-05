@@ -112,6 +112,7 @@ class BrainRouter:
             return dict(text=json.dumps(decision),provider='on-device',model='Local screen heuristic',local=True)
         return dict(text='One small step towards your task. Your timer and parking lot are ready when you are.',provider='on-device',model='Local reply',local=True)
     def complete(self,prompt,blocked=frozenset(),budget=160):
+        if prompt.get('purpose')=='question':budget=min(budget,45)
         deadline=time.monotonic()+budget
         with self.lock:byid={self.id(m):m for m in self.models};ranked=self.snapshot()
         for state in ranked:

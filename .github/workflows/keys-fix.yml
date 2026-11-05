@@ -30,6 +30,16 @@ jobs:
           for scheme in Vigil VigilMacy; do
             xcodebuild -project Vigil.xcodeproj -scheme "$scheme" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "build/$scheme" -jobs 2 CODE_SIGNING_ALLOWED=NO build > "$scheme-build.log" 2>&1
           done
+      - name: Verify feature isolation and capture native feature views
+        if: github.ref == 'refs/heads/features-voice-vision'
+        run: |
+          python3 scripts/check_voice_vision_isolation.py
+          APP=build/VigilMac/Build/Products/Release/Vigil.app
+          codesign --force --deep --sign - "$APP"
+          open -g -n "$APP" --args --vigil-feature-proof "$PWD/feature-previews" --vigil-skip-intro
+          sleep 20
+          pgrep -f "/$APP/Contents/MacOS/Vigil"
+          python3 scripts/check_feature_previews.py feature-previews
       - name: Preserve unsigned apps for authorised signing and device verification
         run: |
           mkdir -p delivery
@@ -47,4 +57,5 @@ jobs:
           path: |
             delivery/
             unit-tests.log
+            feature-previews/
             *-build.log

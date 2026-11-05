@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E155A1A1A1A1A1A1A1A1A102 /* VigilChime.wav in Resources */ = {isa = PBXBuildFile; fileRef = E155A1A1A1A1A1A1A1A1A101 /* VigilChime.wav */; };
 		0078EB9BD172B8A524760730 /* GooglyLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FA3991894542E2641E8FCE /* GooglyLink.swift */; };
 		047EF0390431EA28A4283B1B /* VigilChirp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71F2B93B38CF81CFDD900401 /* VigilChirp.swift */; };
 		05552A1D60F1F1C18E2858FD /* FocusSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A17F83E9B307A9A55931105 /* FocusSession.swift */; };
@@ -176,6 +177,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		E155A1A1A1A1A1A1A1A1A101 /* VigilChime.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = VigilChime.wav; sourceTree = "<group>"; };
 		02178B00860CAC50C31890B4 /* BlobShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobShape.swift; sourceTree = "<group>"; };
 		081D6A14A3BCC1318F7E85BE /* VigilCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VigilCore.swift; sourceTree = "<group>"; };
 		0F84A7B718B5FE27BDF2CFD2 /* VigilFeatureViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VigilFeatureViews.swift; sourceTree = "<group>"; };
@@ -296,6 +298,7 @@
 		95D0484D65FDFCAEF79F3FC5 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				E155A1A1A1A1A1A1A1A1A101 /* VigilChime.wav */,
 				C0635A76C2C6D08EB30941B8 /* AppIcon.icns */,
 				BEB90116AE5D01F59BB9CB7D /* Assets.xcassets */,
 				27B4D107197D13DABE10C7CF /* model-candidates.json */,
@@ -490,6 +493,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E155A1A1A1A1A1A1A1A1A102 /* VigilChime.wav in Resources */,
 				3AF4F53F222C544E193A27CF /* AppIcon.icns in Resources */,
 				28BAECBF7E93EA963ADAD19F /* model-candidates.json in Resources */,
 			);
@@ -749,7 +753,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = V892V3PC6T;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -896,7 +900,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = V892V3PC6T;
 				ENABLE_NS_ASSERTIONS = NO;

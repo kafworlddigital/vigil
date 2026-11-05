@@ -179,6 +179,7 @@ struct FaceView: View {
     var transparent = false
     #if VIGIL_VOICE_VISION
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject private var features = VoiceVisionController.shared
     #endif
 
     // The design is drawn on an 844 × 390 landscape phone.
@@ -189,10 +190,9 @@ struct FaceView: View {
             Canvas { ctx, size in
                 var frame = animator.step(timeline.date.timeIntervalSinceReferenceDate)
                 #if VIGIL_VOICE_VISION
-                let features=VoiceVisionController.shared
                 let age=timeline.date.timeIntervalSince(features.effectAt)
-                if features.effect == .eyeWiggle,age >= 0,age < 0.9,!reduceMotion {
-                    frame.gaze.x += sin(age * .pi * 9) * 0.35 * (1-age/0.9)
+                if features.effect == .eyeWiggle,age >= 0,age < 1.6,!reduceMotion {
+                    frame.gaze.x += sin(age * .pi * 8) * 0.65 * (1-age/1.6)
                 }
                 #endif
                 FaceView.draw(frame, in: &ctx, size: size, transparent: transparent)

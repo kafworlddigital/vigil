@@ -8,6 +8,8 @@ import AVFoundation
     @Published private(set) var listening = false
     @Published var message = "Wake listening is off."
     var onCommand: ((VigilVoiceCommand) -> Void)?
+    var onWake: (() -> Void)?
+    private var recognizer: SFSpeechRecognizer?
     private var engine: AVAudioEngine?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var recognition: SFSpeechRecognitionTask?
@@ -16,6 +18,17 @@ import AVFoundation
     private var generation = UUID()
     private var tapped = false
     private var delivered = false
+    private var armedUntil = Date.distantPast
+    private var wakeShown = false
+    private var lastCommand: VigilVoiceCommand?
+    private(set) var wakeCount = 0
+    private(set) var inputPeak: Float = 0
+
+    func arm() {
+        armedUntil = Date().addingTimeInterval(10)
+        onWake?()
+        start()
+    }
 
     func start() {
         guard !listening, !VoiceVisionController.proofMode else { return }
@@ -29,6 +42,7 @@ import AVFoundation
             message = "On-device English speech is unavailable. Use the buttons instead."; return
         }
         let token = generation
+        self.recognizer = recognizer
         do {
             #if os(iOS)
             try AVAudioSession.sharedInstance().setCategory(.record, mode: .measurement, options: [])
@@ -38,28 +52,50 @@ import AVFoundation
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.requiresOnDeviceRecognition = true
             request.shouldReportPartialResults = true
-            request.contextualStrings = ["Vigil", "Vigil what is this", "Vigil look at me", "Vigil I am stuck", "Vigil remind me in five minutes"]
-            self.request = request; delivered = false
+            request.contextualStrings = ["Vigil"]
+            self.request = request; delivered = false; wakeShown = false; lastCommand = nil
             recognition = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 Task { @MainActor in
                     guard let self, self.generation == token else { return }
-                    if let result, !self.delivered,
-                       let command = VigilVoiceCommand.parse(result.bestTranscription.formattedString) {
-                        self.debounce?.cancel()
-                        self.debounce = Task { @MainActor [weak self] in
-                            do { try await Task.sleep(nanoseconds: 1_200_000_000) } catch { return }
-                            guard let self, self.generation == token, !self.delivered else { return }
-                            self.delivered = true; self.stop(); self.onCommand?(command)
+                    if let result, !self.delivered {
+                        let transcript = result.bestTranscription.formattedString
+                        let heardName = VigilVoiceCommand.hasWakeWord(transcript)
+                        if heardName && !self.wakeShown {
+                            self.wakeShown = true; self.wakeCount += 1
+                            self.armedUntil = Date().addingTimeInterval(10); self.onWake?()
                         }
-                    } else if result != nil { self.debounce?.cancel() }
-                    if (error != nil || result?.isFinal == true), self.debounce == nil || self.debounce?.isCancelled == true {
-                        self.stop(); self.message = "Speech paused. Tap Listen to restart."
+                        let command = VigilVoiceCommand.parse(transcript, requiresWakeWord: Date() >= self.armedUntil)
+                        if let command, command != self.lastCommand {
+                            self.lastCommand = command; self.debounce?.cancel()
+                            self.debounce = Task { @MainActor [weak self] in
+                                do { try await Task.sleep(nanoseconds: 700_000_000) } catch { return }
+                                guard let self, self.generation == token, !self.delivered else { return }
+                                self.delivered = true; self.armedUntil = .distantPast; self.stop(); self.onCommand?(command)
+                            }
+                        } else if command == nil {
+                            self.lastCommand = nil; self.debounce?.cancel(); self.debounce = nil
+                        }
+                    }
+                    if (error != nil || result?.isFinal == true), self.lastCommand == nil {
+                        self.stop()
+                        self.rotation = Task { @MainActor [weak self] in
+                            do { try await Task.sleep(nanoseconds: 600_000_000) } catch { return }
+                            guard let self, VoiceVisionController.shared.enabled || Date() < self.armedUntil else { return }
+                            self.start()
+                        }
                     }
                 }
             }
             let input = engine.inputNode, format = input.outputFormat(forBus: 0)
             guard format.sampleRate > 0, format.channelCount > 0 else { throw WakeFailure.noInput }
-            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak request] buffer, _ in request?.append(buffer) }
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self, weak request] buffer, _ in
+                request?.append(buffer)
+                if let data = buffer.floatChannelData?[0] {
+                    var peak: Float = 0
+                    for index in 0..<Int(buffer.frameLength) { peak = max(peak, abs(data[index])) }
+                    Task { @MainActor [weak self] in self?.inputPeak = peak }
+                }
+            }
             tapped = true; engine.prepare(); try engine.start()
             listening = true; message = "Listening on-device for ‘Vigil’ · microphone on"
             // Recognition sessions are bounded. Rotate rather than holding an expired task.
@@ -74,7 +110,7 @@ import AVFoundation
         generation = UUID(); debounce?.cancel(); debounce = nil; rotation?.cancel(); rotation = nil
         engine?.stop()
         if tapped { engine?.inputNode.removeTap(onBus: 0); tapped = false }
-        request?.endAudio(); recognition?.cancel(); recognition = nil; request = nil; engine = nil; listening = false
+        request?.endAudio(); recognition?.cancel(); recognition = nil; request = nil; recognizer = nil; engine = nil; listening = false
         message = "Wake listening is off."
         #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)

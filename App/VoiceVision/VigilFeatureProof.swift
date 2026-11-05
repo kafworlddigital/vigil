@@ -1,10 +1,160 @@
 #if VIGIL_VOICE_VISION && os(macOS)
 import AppKit
 import SwiftUI
+import AVFoundation
+import Speech
+import ScreenCaptureKit
+import CoreAudio
+import Carbon
+import ApplicationServices
 
-/// Explicit cloud-only captures of real native views with labelled synthetic data.
-/// No camera, microphone, speech, haptic, private screen content or provider request.
+/// Explicit bounded evidence modes: silent cloud previews, or an authorised
+/// local hardware check. Neither mode sends a provider request.
 @MainActor enum VigilFeatureProof {
+    /// Explicit local hardware check. Unlike preview mode this really plays audio.
+    static func beginNudgeCheck() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "--vigil-nudge-check"), i + 1 < args.count else { return }
+        let folder = URL(fileURLWithPath: args[i + 1], isDirectory: true)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            let host = VigilCharacterHost.shared, controller = VoiceVisionController.shared
+            let voice = VigilVoiceOutput.shared
+            controller.wake.stop(); voice.stop()
+            let meter = VigilNudgeAudioMeter()
+            var result: [String: Any] = ["build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?",
+                "captureKind": "installed native app own-window view captures; no screen/preview fixtures", "systemAudioPermission": CGPreflightScreenCaptureAccess(),
+                "accessibilityPermission": AXIsProcessTrusted(), "volume": UserDefaults.standard.object(forKey: "vigil.voice.volume") as? Double ?? 0.5,
+                "spokenEnabled": voice.enabled, "colour": CompanionPreferences().colour.rawValue,
+                "applicationActiveDuringTests": NSApp.isActive]
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            @MainActor func save(_ view: NSView?, _ name: String) {
+                guard let view else { return }; view.displayIfNeeded()
+                guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: folder.appendingPathComponent(name + ".png")) }
+            }
+            var stream: SCStream?
+            if CGPreflightScreenCaptureAccess() {
+                do {
+                    let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                    if let window = content.windows.first(where: { $0.owningApplication?.processID == getpid() }) {
+                        let config = SCStreamConfiguration(); config.width = 2; config.height = 2
+                        config.capturesAudio = true; config.excludesCurrentProcessAudio = false
+                        let capture = SCStream(filter: SCContentFilter(desktopIndependentWindow: window), configuration: config, delegate: nil)
+                        try capture.addStreamOutput(meter, type: .audio, sampleHandlerQueue: DispatchQueue(label: "vigil.nudge.system-audio"))
+                        try await capture.startCapture(); stream = capture
+                        result["audioLevelSource"] = "ScreenCaptureKit system output"
+                    }
+                } catch { result["systemAudioError"] = String(describing: error) }
+            }
+            if stream == nil { result["audioLevelSource"] = "system output capture blocked; microphone speaker-loopback only"; meter.startMicrophone() }
+            let tests = NSPanel(contentRect: CGRect(x: 80, y: 180, width: 340, height: 250), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            tests.title = "Vigil Settings nudge tests"; tests.hidesOnDeactivate = false; tests.level = .floating
+            tests.contentView = NSHostingView(rootView: VigilNudgeTestButtons().padding(20).frame(width: 340, height: 250))
+            tests.orderFrontRegardless()
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            save(tests.contentView, "settings-test-buttons")
+            // Own-process accessibility traversal needs no control of other apps.
+            @MainActor func find(_ object: NSObject, _ wanted: String, _ depth: Int = 0) -> NSObject? {
+                guard depth < 20 else { return nil }
+                for key in ["accessibilityIdentifier", "accessibilityLabel"] {
+                    let selector = NSSelectorFromString(key)
+                    if object.responds(to: selector), let value = object.perform(selector)?.takeUnretainedValue() as? String,
+                       value == wanted { return object }
+                }
+                let selector = NSSelectorFromString("accessibilityChildren")
+                if object.responds(to: selector), let children = object.perform(selector)?.takeUnretainedValue() as? [NSObject] {
+                    for child in children { if let value = find(child, wanted, depth + 1) { return value } }
+                }
+                if let view = object as? NSView { for child in view.subviews { if let value = find(child, wanted, depth + 1) { return value } } }
+                return nil
+            }
+            var rows: [[String: Any]] = []
+            for style in VigilNudgeStyle.allCases {
+                controller.effectAt = .distantPast
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                save(host.panel?.contentView, style.rawValue + "-before")
+                meter.reset()
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                let baseline = meter.snapshot(); meter.reset()
+                let button = tests.contentView.flatMap { find($0, "features.test." + style.rawValue) ?? find($0, "Test " + style.title) }
+                let selector = NSSelectorFromString("accessibilityPerformPress")
+                var pressed = false
+                if let button, button.responds(to: selector) {
+                    typealias Press = @convention(c) (AnyObject, Selector) -> Bool
+                    pressed = unsafeBitCast(button.method(for: selector), to: Press.self)(button, selector)
+                }
+                if !pressed { VigilFeedback.testNudge(style) }
+                try? await Task.sleep(nanoseconds: 220_000_000)
+                save(host.panel?.contentView, style.rawValue + "-during-1")
+                let outputRunning = VigilNudgeAudioMeter.outputRunning()
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                save(host.panel?.contentView, style.rawValue + "-during-2")
+                if style == .spokenLine {
+                    for _ in 0..<100 {
+                        if !voice.speaking { break }; try? await Task.sleep(nanoseconds: 100_000_000)
+                    }
+                } else { try? await Task.sleep(nanoseconds: 1_700_000_000) }
+                rows.append(["style": style.rawValue, "settingsButtonPressed": pressed, "sameSettingsActionInvoked": true,
+                    "baseline": baseline, "during": meter.snapshot(), "chimePlayerStarted": VigilChime.shared.started,
+                    "speechBackend": voice.backend, "speechRenderedPeak": voice.renderedPeak, "speechPlayerStarted": voice.playerStarted,
+                    "outputDeviceRunningDuring": outputRunning])
+                voice.stop(); controller.wake.stop()
+            }
+            tests.orderOut(nil)
+            meter.stop(); if let stream { try? await stream.stopCapture() }
+            controller.installHotKey(); result["hotKeyRegistrationStatus"] = controller.hotKeyStatus
+            let beforeClick = controller.manualStartCount
+            if let panel = host.panel {
+                let location = NSPoint(x: panel.frame.width / 2, y: panel.frame.height / 2)
+                for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                    if let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: panel.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1) { panel.sendEvent(event) }
+                }
+            }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            result["faceClickNativeEventDispatched"] = controller.manualStartCount > beforeClick
+            let beforeKey = controller.manualStartCount
+            result["globalEventPostPermission"] = CGPreflightPostEventAccess()
+            if CGPreflightPostEventAccess() {
+                for down in [true, false] {
+                    let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_Space), keyDown: down)
+                    event?.flags = .maskAlternate; event?.post(tap: .cghidEventTap)
+                }
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            }
+            result["globalHotKeyNativeEventDispatched"] = controller.manualStartCount > beforeKey
+            controller.startManualListening()
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            result["manualListeningStarted"] = controller.wake.listening
+            save(controller.bubbleForCheck?.contentView, "manual-listening-bubble")
+            controller.wake.stop()
+            // Real speaker → microphone wake check, not an injected transcript.
+            controller.wake.start()
+            let count = controller.wake.wakeCount
+            if controller.wake.listening {
+                let synth = NSSpeechSynthesizer(voice: nil)
+                synth?.volume = VoiceVisionPolicy.volume(UserDefaults.standard.object(forKey: "vigil.voice.volume") as? Double ?? 0.5)
+                _ = synth?.startSpeaking("Vigil")
+                for _ in 0..<50 {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    if controller.wake.wakeCount > count { break }
+                }
+                synth?.stopSpeaking()
+            }
+            result["speakerToMicrophoneWakeDetected"] = controller.wake.wakeCount > count
+            result["onDeviceWakeListeningStarted"] = controller.wake.listening
+            result["speechPermission"] = SFSpeechRecognizer.authorizationStatus().rawValue
+            result["microphonePermission"] = AVCaptureDevice.authorizationStatus(for: .audio).rawValue
+            save(controller.bubbleForCheck?.contentView, "wake-listening-bubble")
+            result["nudges"] = rows; result["finishedAt"] = ISO8601DateFormatter().string(from: Date())
+            if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
+                try? data.write(to: folder.appendingPathComponent("hardware-results.json"), options: .atomic)
+            }
+            controller.wake.stop(); controller.dismissAnswer(); controller.resumeListening()
+        }
+    }
     static func begin() {
         let args = ProcessInfo.processInfo.arguments
         guard let index = args.firstIndex(of: "--vigil-feature-proof"), index + 1 < args.count else { return }
@@ -42,6 +192,63 @@ import SwiftUI
         }
     }
     private enum ProofFailure: Error { case render }
+}
+
+/// Keeps levels only, never audio recordings or private transcripts.
+private final class VigilNudgeAudioMeter: NSObject, SCStreamOutput, @unchecked Sendable {
+    private let lock = NSLock()
+    private var peak: Float = 0
+    private var rms: Double = 0
+    private var buffers = 0
+    private var microphone: AVAudioEngine?
+    func reset() { lock.lock(); peak = 0; rms = 0; buffers = 0; lock.unlock() }
+    func snapshot() -> [String: Any] {
+        lock.lock(); defer { lock.unlock() }
+        return ["peak": peak, "maxRMS": rms, "buffers": buffers, "peakDBFS": 20 * log10(max(Double(peak), 0.000000001))]
+    }
+    private func consume(_ samples: UnsafePointer<Float>, _ count: Int) {
+        guard count > 0 else { return }
+        var maximum: Float = 0, sum: Double = 0
+        for i in 0..<count { maximum = max(maximum, abs(samples[i])); sum += Double(samples[i] * samples[i]) }
+        lock.lock(); peak = max(peak, maximum); rms = max(rms, sqrt(sum / Double(count))); buffers += 1; lock.unlock()
+    }
+    func startMicrophone() {
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else { return }
+        let engine = AVAudioEngine()
+        let format = engine.inputNode.outputFormat(forBus: 0)
+        guard format.sampleRate > 0 else { return }
+        engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            if let data = buffer.floatChannelData?[0] { self?.consume(data, Int(buffer.frameLength)) }
+        }
+        microphone = engine
+        do { try engine.start() } catch { stop() }
+    }
+    func stop() {
+        if let microphone { microphone.stop(); microphone.inputNode.removeTap(onBus: 0) }; microphone = nil
+    }
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
+        guard outputType == .audio,
+              let description = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let format = CMAudioFormatDescriptionGetStreamBasicDescription(description),
+              format.pointee.mFormatFlags & kAudioFormatFlagIsFloat != 0, format.pointee.mBitsPerChannel == 32 else { return }
+        let list = AudioBufferList.allocate(maximumBuffers: 8)
+        defer { list.unsafeMutablePointer.deallocate() }
+        var block: CMBlockBuffer?
+        guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sampleBuffer, bufferListSizeNeededOut: nil,
+            bufferListOut: list.unsafeMutablePointer, bufferListSize: MemoryLayout<AudioBufferList>.size + 7 * MemoryLayout<AudioBuffer>.size,
+            blockBufferAllocator: nil, blockBufferMemoryAllocator: nil, flags: 0, blockBufferOut: &block) == noErr else { return }
+        for buffer in list {
+            if let data = buffer.mData { consume(data.assumingMemoryBound(to: Float.self), Int(buffer.mDataByteSize) / MemoryLayout<Float>.size) }
+        }
+    }
+    static func outputRunning() -> Bool {
+        var device = AudioDeviceID(0), size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device) == noErr else { return false }
+        var running: UInt32 = 0; size = UInt32(MemoryLayout<UInt32>.size)
+        address.mSelector = kAudioDevicePropertyDeviceIsRunningSomewhere
+        return AudioObjectGetPropertyData(device, &address, 0, nil, &size, &running) == noErr && running != 0
+    }
 }
 
 private struct VigilNativeFeatureCard: View {

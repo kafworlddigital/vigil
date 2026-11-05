@@ -5,6 +5,19 @@ import FoundationNetworking
 #endif
 
 final class VoiceVisionTests: XCTestCase {
+    func testPhoneticWakeOnlyAtStartAndManualCommandWindow() {
+        for name in ["Vigil", "Virgil", "Vigils", "Vigel", "Vidjil", "Visual", "Rachel", "Vigill", "Vigl"] {
+            XCTAssertTrue(VigilVoiceCommand.hasWakeWord(name), name)
+            XCTAssertEqual(VigilVoiceCommand.parse(name + ", what is this?"), .whatIsThis(""), name)
+            XCTAssertNil(VigilVoiceCommand.parse("Tell " + name + " what is this"), name)
+        }
+        for text in ["vigilance", "village", "vigorous", "hello rachel", "tell virgil", "rachels"] {
+            XCTAssertFalse(VigilVoiceCommand.hasWakeWord(text), text)
+        }
+        XCTAssertEqual(VigilVoiceCommand.parse("what is this?", requiresWakeWord: false), .whatIsThis(""))
+        XCTAssertNil(VigilVoiceCommand.parse("what is this?"))
+        XCTAssertNil(VigilVoiceCommand.parse("Rachel what is thisish"))
+    }
     func testWakeRequiresSeparateNameAndExactCommand() {
         XCTAssertEqual(VigilVoiceCommand.parse("Vigil, what is this?"), .whatIsThis(""))
         XCTAssertEqual(VigilVoiceCommand.parse("VIGIL! Look at me: does this shirt suit me?"), .lookAtMe("does this shirt suit me"))

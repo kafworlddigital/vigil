@@ -1,0 +1,44 @@
+Mac wake and nudge repairs (build 9)
+
+Wake recognition requires Apple's on-device English recogniser, retained for the
+session, with contextualStrings ["Vigil"]. The first separate word accepts Vigil,
+Virgil, Vigils, Vigel, Vidjil, Visual and Rachel, plus bounded one-edit variants.
+Exact supported commands are still required. A wake shows a Listening… bubble.
+Option+Space globally, or clicking the face, opens a ten-second command window
+without requiring the name. Option-drag still moves the face. Backgrounding the
+Mac app no longer stops its listener or spoken output.
+
+Chime uses a bundled, generated short WAV and a retained AVAudioPlayer, with the
+same volume as speech, independent of the system alert volume. Speech retains
+AVSpeechSynthesizer, chooses an installed English voice, renders actual PCM and
+plays it through AVAudioPlayer. Bounded NSSpeechSynthesizer and say file-render
+fallbacks retain the same playback volume. The spoken switch and zero volume
+remain respected. The volume slider also works when speech is switched off.
+
+The colour flash is a two-second ring and face tint in the companion colour.
+Bounce and eye wiggle are stronger and longer; Reduce Motion substitutes a glow.
+Settings Test buttons use the same native action as the installed-app check.
+
+Acceptance recorded for the installed macOS Release build:
+- One arm64 Release build succeeded. All 46 portable core tests passed separately
+  on Linux, including wake aliases, false matches and manual command parsing.
+- Real installed-app own-window bitmap captures show the colour ring/tint, bounce
+  and changing pupils. They are native NSWindow-view captures, not compositor
+  screenshots or simulator/preview fixtures.
+- All five native Settings Test buttons accepted accessibility presses within
+  the app. Native mouse events activated the face click; posted Option+Space
+  events activated the registered global shortcut. Manual listening started.
+- AVSpeechSynthesizer produced non-silent PCM and AVAudioPlayer started. Chime
+  playback started and the output device was active during playback. Tests ran
+  with the application inactive. This is not proof of audible speaker output.
+- The system audio capture delivered no measurable buffers. An independent
+  system-recording command failed. A microphone fallback received buffers whose
+  samples were all zero. No usable recording of speaker output was obtained.
+- Speaker-to-microphone wake recognition did not pass. The alias parser tests
+  and started listener do not establish live spoken-wake acceptance.
+
+Therefore live wake recognition and audible chime/speech acceptance remain open.
+The diagnostic flag --vigil-nudge-check DIRECTORY plays real audio explicitly;
+the older preview/proof modes remain silent. No raw microphone audio or private
+transcripts are retained by the check. Native button captures can render blank;
+blank Settings captures are not accepted as visual evidence of the buttons.

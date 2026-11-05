@@ -20,6 +20,7 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         #if VIGIL_VOICE_VISION
         VigilFeatureProof.begin()
+        VigilFeatureProof.beginNudgeCheck()
         #endif
         let args=ProcessInfo.processInfo.arguments
         if let i=args.firstIndex(of:"--vigil-test-connections"),i+1<args.count {
@@ -55,7 +56,15 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         p.title="Vigil desktop face";p.isOpaque=false;p.backgroundColor = .clear;p.hasShadow=false
         p.level = .floating;p.hidesOnDeactivate=false;p.isFloatingPanel=true;p.ignoresMouseEvents=true
         p.collectionBehavior=[.canJoinAllSpaces,.fullScreenAuxiliary,.ignoresCycle]
+        #if VIGIL_VOICE_VISION
+        p.contentView=NSHostingView(rootView:FaceView(animator:animator,transparent:true)
+            .contentShape(Rectangle())
+            .onTapGesture { if !NSEvent.modifierFlags.contains(.option) { VoiceVisionController.shared.startManualListening() } }
+            .accessibilityLabel("Vigil face. Click to listen, or press Option Space.")
+            .help("Click to listen · Option+Space anywhere · Option-drag to move"))
+        #else
         p.contentView=NSHostingView(rootView:FaceView(animator:animator,transparent:true))
+        #endif
         panel=p;resize();setVisible(visible)
         cursor.onFace={ [weak self] frame in
             guard let self else{return}
@@ -98,7 +107,7 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         resize()
     }
     func setVisible(_ show:Bool){UserDefaults.standard.set(show,forKey:"vigil.face.visible");if show{panel?.orderFrontRegardless()}else{panel?.orderOut(nil)}}
-    func showMoveHint(){cursor.view.caption="Hold Option and drag my face to move me. Ordinary clicks pass through.";DispatchQueue.main.asyncAfter(deadline:.now()+7){[weak self] in self?.cursor.view.caption=nil}}
+    func showMoveHint(){cursor.view.caption="Click my face or press Option+Space to listen. Hold Option and drag to move me.";DispatchQueue.main.asyncAfter(deadline:.now()+7){[weak self] in self?.cursor.view.caption=nil}}
     private func trackDrag(){
         guard let p=panel,visible else{return}
         let m=NSEvent.mouseLocation
@@ -110,8 +119,11 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         }else if dragging{
             dragging=false;UserDefaults.standard.set(p.frame.origin.x,forKey:"vigil.face.x");UserDefaults.standard.set(p.frame.origin.y,forKey:"vigil.face.y")
         }
-        // Transparent at rest; only the deliberate Option-drag gesture consumes input.
+        #if VIGIL_VOICE_VISION
+        p.ignoresMouseEvents = !(dragging || p.frame.contains(m))
+        #else
         p.ignoresMouseEvents = !(option && (dragging || p.frame.contains(m)))
+        #endif
     }
     func setMood(_ mood:Mood){Settings.shared.mood=mood;cursor.view.engine.brainMood=mood}
     func releaseMood(){cursor.view.engine.brainMood=nil;Settings.shared.mood = .listening}

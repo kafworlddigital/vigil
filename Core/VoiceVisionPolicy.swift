@@ -20,9 +20,27 @@ public enum VigilVoiceCommand: Equatable, Sendable {
     case stuck(String)
     case remind(minutes: Int, text: String)
 
-    public static func parse(_ transcript: String) -> Self? {
+    /// Only the first, separate word can wake Vigil. Keep phonetic tolerance bounded.
+    public static func hasWakeWord(_ transcript: String) -> Bool {
+        guard let word = transcript.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).first else { return false }
+        if ["vigil", "virgil", "vigils", "vigel", "vidjil", "visual", "rachel"].contains(String(word)) { return true }
+        guard word.first == "v", (4...6).contains(word.count) else { return false }
+        let target = Array("vigil"), candidate = Array(word)
+        var row = Array(0...target.count)
+        for (i, letter) in candidate.enumerated() {
+            var next = [i + 1]
+            for (j, wanted) in target.enumerated() {
+                next.append(min(next[j] + 1, row[j + 1] + 1, row[j] + (letter == wanted ? 0 : 1)))
+            }
+            row = next
+        }
+        return row[target.count] <= 1
+    }
+
+    public static func parse(_ transcript: String, requiresWakeWord: Bool = true) -> Self? {
+        if !requiresWakeWord && !hasWakeWord(transcript) { return parse("Vigil " + transcript) }
         let words = transcript.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
-        guard words.first == "vigil" else { return nil }
+        guard hasWakeWord(transcript) else { return nil }
         let rest = Array(words.dropFirst())
         if rest.starts(with: ["what", "is", "this"]) {
             return .whatIsThis(rest.dropFirst(3).joined(separator: " "))

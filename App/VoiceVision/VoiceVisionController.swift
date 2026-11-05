@@ -5,6 +5,7 @@ import Speech
 #if os(macOS)
 import AppKit
 import ApplicationServices
+import Carbon
 #endif
 
 @MainActor final class VoiceVisionController: ObservableObject {
@@ -26,31 +27,86 @@ import ApplicationServices
     private var foreground = true
     #if os(macOS)
     private var bubble: NSPanel?
+    var bubbleForCheck: NSPanel? { bubble }
+    private var hotKey: EventHotKeyRef?
+    private var hotKeyHandler: EventHandlerRef?
     #endif
+    private var listeningBubble: Task<Void, Never>?
+    private(set) var manualStartCount = 0
     var enabled: Bool {
         UserDefaults.standard.bool(forKey: "vigil.voice.wake") && UserDefaults.standard.bool(forKey: "vigil.voice.introduced")
     }
     private init() {
         wake.onCommand = { [weak self] in self?.ask($0) }
+        wake.onWake = { [weak self] in self?.showListening() }
         VigilVoiceOutput.shared.onFinished = { [weak self] in self?.resumeListening() }
     }
     func start() {
         guard !VigilEdition.macy, !Self.proofMode else { return }
         if !UserDefaults.standard.bool(forKey: "vigil.voice.introduced") { showIntroduction = true }
         VigilSupportController.shared.start()
+        #if os(macOS)
+        installHotKey()
+        #endif
         resumeListening()
     }
     func setForeground(_ value: Bool) {
         foreground = value
         VigilSupportController.shared.setForeground(value)
-        if value { resumeListening() }
-        else { cancel(); VigilVoiceOutput.shared.stop(); wake.stop() }
+        #if os(macOS)
+        // The Mac companion continues listening and delivering speech in other apps.
+        resumeListening()
+        #else
+        if value { resumeListening() } else { cancel(); VigilVoiceOutput.shared.stop(); wake.stop() }
+        #endif
     }
     func resumeListening() {
-        guard enabled, foreground, !busy, !VigilVoiceOutput.shared.speaking, !Self.proofMode else { return }
+        #if os(iOS)
+        guard foreground else { return }
+        #endif
+        guard enabled, !busy, !VigilVoiceOutput.shared.speaking, !Self.proofMode else { return }
         wake.start()
     }
     func pauseForSpeech() { wake.stop() }
+    func startManualListening() {
+        guard !VigilEdition.macy, !Self.proofMode, !busy else { return }
+        manualStartCount += 1
+        VigilVoiceOutput.shared.stop()
+        Task { @MainActor in
+            if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined { _ = await AVCaptureDevice.requestAccess(for: .audio) }
+            if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
+                _ = await withCheckedContinuation { (c: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
+                    SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) }
+                }
+            }
+            wake.arm()
+            if !wake.listening { status = wake.message; updateBubble() }
+        }
+    }
+    func showListening() {
+        guard !busy else { return }
+        answer = ""; status = "Listening…"; updateBubble()
+        listeningBubble?.cancel()
+        listeningBubble = Task { @MainActor [weak self] in
+            do { try await Task.sleep(nanoseconds: 10_000_000_000) } catch { return }
+            guard let self, self.status == "Listening…" else { return }
+            self.status = ""; self.updateBubble()
+            if !self.enabled { self.wake.stop() }
+        }
+    }
+    #if os(macOS)
+    private(set) var hotKeyStatus: OSStatus = -1
+    func installHotKey() {
+        guard hotKeyHandler == nil else { return }
+        var event = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        let handlerStatus = InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
+            Task { @MainActor in VoiceVisionController.shared.startManualListening() }
+            return noErr
+        }, 1, &event, nil, &hotKeyHandler)
+        guard handlerStatus == noErr else { hotKeyStatus = handlerStatus; return }
+        hotKeyStatus = RegisterEventHotKey(UInt32(kVK_Space), UInt32(optionKey), EventHotKeyID(signature: 0x5649474C, id: 1), GetApplicationEventTarget(), 0, &hotKey)
+    }
+    #endif
     func setListening(_ value: Bool) {
         if value, !UserDefaults.standard.bool(forKey: "vigil.voice.introduced") { showIntroduction = true; return }
         UserDefaults.standard.set(value, forKey: "vigil.voice.wake")

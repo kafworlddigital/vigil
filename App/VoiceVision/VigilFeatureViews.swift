@@ -70,13 +70,7 @@ struct VigilFeatureSettings: View {
             Picker("Nudge style", selection: $style) {
                 ForEach(VigilNudgeStyle.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
             }.accessibilityIdentifier("features.nudgeStyle")
-            ForEach(VigilNudgeStyle.allCases, id: \.rawValue) { option in
-                HStack {
-                    Text(option.title); Spacer()
-                    Button("Test") { VigilFeedback.nudge(option) }
-                        .accessibilityLabel("Test " + option.title).accessibilityIdentifier("features.test." + option.rawValue)
-                }
-            }
+            VigilNudgeTestButtons()
             Toggle("Spoken nudges and answers", isOn: $spoken).onChange(of: spoken) { _, value in
                 if !value { VigilVoiceOutput.shared.stop(); controller.resumeListening() }
             }
@@ -87,13 +81,15 @@ struct VigilFeatureSettings: View {
             HStack {
                 Text("Volume"); Slider(value: $volume, in: 0...1)
                 Text("\(Int(volume * 100))%").monospacedDigit().frame(width: 45)
-            }.disabled(!spoken)
+            }
             Text("Apple's installed voices are free. Short nudges say ‘Back to it’, ‘Focus’ or ‘One thing’. Silence mode turns speech off.").font(.caption).foregroundStyle(.secondary)
+            Text("Volume controls both chime and speech. Zero means silent. Colour flash uses your companion colour.").font(.caption).foregroundStyle(.secondary)
             Divider()
             Toggle("Listen for ‘Vigil’ on this device", isOn: Binding(get: { controller.enabled }, set: controller.setListening))
             Text(wake.message).font(.caption).foregroundStyle(.secondary)
             Button("Restart listening") { wake.stop(); controller.resumeListening() }.disabled(!controller.enabled || controller.busy)
             #if os(macOS)
+            Text("Option+Space works from any app. Click Vigil’s face to listen without saying its name; Option-drag still moves the face.").font(.caption)
             Text("Say ‘Vigil, what is this?’ to read the item under your pointer. Accessibility text comes first; otherwise only a small crop is sent. Protected work screens are skipped.").font(.caption)
             #else
             Text("Wake listening works while Vigil is open. iPhone and iPad cannot read other apps or the Mac pointer. For that, speak to Vigil on the Mac.").font(.caption)
@@ -105,6 +101,21 @@ struct VigilFeatureSettings: View {
             Button("Feature introduction and permissions") { controller.showIntroduction = true }
             VigilSupportSettings()
             VigilVoiceBar()
+        }
+    }
+}
+
+/// The same native buttons are exercised by the bounded installed-app check.
+struct VigilNudgeTestButtons: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ForEach(VigilNudgeStyle.allCases, id: \.rawValue) { option in
+                HStack {
+                    Text(option.title); Spacer()
+                    Button("Test") { VigilFeedback.testNudge(option) }
+                        .accessibilityLabel("Test " + option.title).accessibilityIdentifier("features.test." + option.rawValue)
+                }
+            }
         }
     }
 }
@@ -159,13 +170,16 @@ struct VigilFaceEffects: ViewModifier {
         TimelineView(.animation) { timeline in
             let age = timeline.date.timeIntervalSince(controller.effectAt)
             let burst = timeline.date.timeIntervalSince(controller.answeredAt)
-            let wave = age >= 0 && age < 0.9 ? sin(age * .pi * 5) * (1 - age / 0.9) : 0
+            let wave = age >= 0 && age < 1.6 ? sin(age * .pi * 4) * (1 - age / 1.6) : 0
             content
-                .offset(y: !reduceMotion && controller.effect == .bounce ? -abs(wave) * 9 : 0)
+                .offset(y: !reduceMotion && controller.effect == .bounce ? -abs(wave) * 18 : 0)
                 .overlay {
                     Group {
-                    if (age >= 0 && age < 0.8 && controller.effect == .colourFlash) || (reduceMotion && burst >= 0 && burst < 0.8) {
-                        RoundedRectangle(cornerRadius: 35).stroke(Color(hex: Palette.gradient[1]).opacity(0.7), lineWidth: 3).padding(4)
+                    if (age >= 0 && age < 2 && controller.effect == .colourFlash) || (reduceMotion && age >= 0 && age < 1.6 && (controller.effect == .bounce || controller.effect == .eyeWiggle)) || (reduceMotion && burst >= 0 && burst < 0.8) {
+                        let opacity = reduceMotion ? 0.9 : 0.45 + 0.55 * abs(cos(age * .pi * 2))
+                        RoundedRectangle(cornerRadius: 28).fill(Color(hex: Palette.gradient[0]).opacity(opacity * 0.32)).padding(5)
+                        RoundedRectangle(cornerRadius: 28).stroke(Color.white.opacity(opacity), lineWidth: 10).padding(7)
+                        RoundedRectangle(cornerRadius: 28).stroke(Color(hex: Palette.gradient[1]).opacity(opacity), lineWidth: 6).padding(7)
                     }
                     if !reduceMotion && burst >= 0 && burst < 1.1 {
                         Canvas { context, size in

@@ -62,7 +62,14 @@ struct PhoneFaceScreen:View {
                 }
             }.padding(.horizontal,24).padding(.vertical,16).foregroundStyle(.white).buttonStyle(.plain)
         }.background(.black).persistentSystemOverlays(.hidden)
-        .onAppear{speech.onResult=voice}
+        .onAppear{speech.onResult=voice
+            #if VIGIL_VOICE_VISION
+            VigilSupportController.shared.currentTask = active?.task ?? ""
+            #endif
+        }
+        #if VIGIL_VOICE_VISION
+        .onChange(of:link.state.session){_,session in VigilSupportController.shared.currentTask = session?.status == .ended ? "" : session?.task ?? ""}
+        #endif
         .onChange(of:held){_,down in
             if down {
                 #if VIGIL_VOICE_VISION

@@ -13,7 +13,13 @@ private struct VigilVoiceVisionIntegration: ViewModifier {
             .task { controller.start() }
             .sheet(isPresented: $controller.showIntroduction) { VigilFeatureIntroduction() }
             .onChange(of: basicIntroductionComplete) { _, completed in
-                if completed && VigilEdition.macy && !UserDefaults.standard.bool(forKey: "vigil.voice.introduced") { controller.showIntroduction = true }
+                if completed && VigilEdition.macy && !UserDefaults.standard.bool(forKey: "vigil.voice.introduced") {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        guard basicIntroductionComplete && !UserDefaults.standard.bool(forKey: "vigil.voice.introduced") else { return }
+                        controller.showIntroduction = true
+                    }
+                }
             }
             #if os(macOS)
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in

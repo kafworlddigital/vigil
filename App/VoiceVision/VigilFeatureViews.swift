@@ -17,6 +17,11 @@ struct VigilAnswerBubble: View {
                 else { Button { controller.dismissAnswer() } label: { Image(systemName: "xmark") }.accessibilityLabel("Dismiss answer") }
             }
             if controller.showCameraPermissionCard { VigilCameraPermissionCard() }
+            else if controller.showPointerPermissionCard {
+                #if os(macOS)
+                VigilPointerPermissionCard()
+                #endif
+            }
             else if controller.voiceNeedsPermission && controller.answer.isEmpty && controller.status != "Listening…" { VigilVoicePermissionCard() }
             else if controller.showShortcutCard {
                 Label("Press \(controller.hotKeyLabel) to speak", systemImage: "keyboard").font(.headline)
@@ -63,6 +68,21 @@ struct VigilVoicePermissionCard: View {
 }
 
 #if os(macOS)
+struct VigilPointerPermissionCard: View {
+    @ObservedObject private var controller = VoiceVisionController.shared
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Explain what you point at", systemImage: "cursorarrow.rays").font(.headline)
+            Text("Accessibility reads the item under your pointer. Screen Recording allows a small picture if needed. Only that item goes to Vigil’s secure brain; protected work and password windows stay private. Your Mac will ask you to turn Vigil on in Settings. Voice can work without this access.")
+                .font(.callout).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Not now") { controller.skipPointerAccess() }
+                Button("Allow") { controller.allowPointerAccess() }.buttonStyle(.borderedProminent)
+            }
+        }
+    }
+}
+
 struct VigilHotKeySheet: View {
     @ObservedObject private var controller = VoiceVisionController.shared
     @Environment(\.dismiss) private var dismiss

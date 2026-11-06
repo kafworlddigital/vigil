@@ -31,6 +31,7 @@ import Carbon
     @Published var hotKeyMessage = ""
     @Published var showShortcutCard = false
     @Published var showCameraPermissionCard = false
+    @Published var showPointerPermissionCard = false
     private var pendingCameraQuestion = ""
     let wake = VigilWakeListener()
     private var job: Task<Void, Never>?
@@ -187,11 +188,17 @@ import Carbon
         if mic != .authorized { names.append("Microphone") }
         if speech != .authorized { names.append("Speech Recognition") }
         #if os(macOS)
-        if !AXIsProcessTrusted() { names.append("Accessibility"); missing = true }
-        if !CGPreflightScreenCaptureAccess() { names.append("Screen Recording"); missing = true }
+        if !VigilEdition.macy {
+            if !AXIsProcessTrusted() { names.append("Accessibility"); missing = true }
+            if !CGPreflightScreenCaptureAccess() { names.append("Screen Recording"); missing = true }
+        }
+        if showPointerPermissionCard && AXIsProcessTrusted() && CGPreflightScreenCaptureAccess() {
+            showPointerPermissionCard = false; status = "Point at an item and ask again."
+        }
         #endif
         if voiceNeedsPermission != missing { voiceNeedsPermission = missing }
-        let message = names.isEmpty ? "Ready to listen and help." : "Let Vigil hear you with " + names.joined(separator: ", ") + ". Choose Allow once, or keep typing. Your device may ask you to switch Vigil on in Settings."
+        let denied = mic == .denied || mic == .restricted || speech == .denied || speech == .restricted
+        let message = names.isEmpty ? "Ready to listen and help." : denied ? "Voice access is off. You can turn on Microphone and Speech Recognition for Vigil in your device’s Settings whenever you’re ready. You can also type." : "Let Vigil hear you with " + names.joined(separator: ", ") + ". Choose Allow once, or keep typing. Your device may ask you to switch Vigil on in Settings."
         if permissionMessage != message { permissionMessage = message }
     }
     /// Only the visible Allow button calls this. Launch, shortcuts and tests never prompt.
@@ -205,6 +212,7 @@ import Carbon
         }
         refreshVoicePermissions()
         #if os(macOS)
+        if !VigilEdition.macy {
         if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized && SFSpeechRecognizer.authorizationStatus() == .authorized {
             if !AXIsProcessTrusted() {
                 let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -218,6 +226,7 @@ import Carbon
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
         } else if SFSpeechRecognizer.authorizationStatus() == .denied {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")!)
+        }
         }
         #endif
         if !voiceNeedsPermission {
@@ -273,6 +282,21 @@ import Carbon
     func enablePermissions() async {
         await allowVoice()
     }
+    #if os(macOS)
+    func allowPointerAccess() {
+        guard !Self.proofMode else { return }
+        if !AXIsProcessTrusted() {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        } else if !CGPreflightScreenCaptureAccess() {
+            _ = CGRequestScreenCaptureAccess()
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+        }
+        refreshVoicePermissions(); updateBubble()
+    }
+    func skipPointerAccess() { showPointerPermissionCard = false; status = ""; updateBubble() }
+    #endif
     func allowCameraFeature() async {
         guard !Self.proofMode else { return }
         if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined { _ = await AVCaptureDevice.requestAccess(for: .video) }
@@ -325,7 +349,10 @@ import Carbon
         if case .whatIsThis = command {
             refreshVoicePermissions()
             guard AXIsProcessTrusted(), CGPreflightScreenCaptureAccess() else {
-                answer = ""; status = "Allow access, then point and ask again."; updateBubble(); return
+                answer = ""
+                if VigilEdition.macy { showPointerPermissionCard = true; status = "" }
+                else { status = "Allow access, then point and ask again." }
+                updateBubble(); return
             }
         }
         #endif
@@ -452,7 +479,7 @@ import Carbon
         #if os(macOS)
         VigilCharacterHost.shared.cursor.requestAnimation(seconds: 2.6)
         guard let face = VigilCharacterHost.shared.panel else { return }
-        if answer.isEmpty && status.isEmpty && (!voiceNeedsPermission || !enabled) && !showShortcutCard && !showCameraPermissionCard { bubble?.orderOut(nil); return }
+        if answer.isEmpty && status.isEmpty && (!voiceNeedsPermission || !enabled) && !showShortcutCard && !showCameraPermissionCard && !showPointerPermissionCard { bubble?.orderOut(nil); return }
         let panel = bubble ?? NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = "Vigil answer"; panel.isOpaque = false; panel.backgroundColor = .clear
         panel.level = .floating; panel.hidesOnDeactivate = false

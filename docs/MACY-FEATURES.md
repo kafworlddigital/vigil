@@ -24,6 +24,11 @@ Per-device tokens and all saved focus data remain separate from Keith's edition.
 No token or key is baked into a release. Friendly Allow cards precede microphone,
 speech and camera requests. Optional tired checks default off; camera permission
 is reused after the OS grants it. The camera never starts just from launch.
+Voice only requires Microphone and Speech Recognition. Mac pointer reading has
+its own explanatory Allow card for Accessibility and Screen Recording, shown
+when What is this is requested. Declining screen access does not block voice.
+The paired iPhone's current task stays available to next-step help on its face
+screen, without first having to open the focus dashboard.
 
 The M1/8 GB target retains the prepared idle improvements: no continuous idle face
 or particle drawing, a shared pointer sampling clock, paused focus clocks when no

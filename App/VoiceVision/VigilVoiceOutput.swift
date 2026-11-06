@@ -75,7 +75,7 @@ import UIKit
                 let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
                     .appendingPathComponent(VigilEdition.folder + "/Speech", isDirectory: true)
                 try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-                let hash = SHA256.hash(data: Data(("piper-lessac-v1:" + text).utf8)).map { String(format: "%02x", $0) }.joined()
+                let hash = SHA256.hash(data: Data(("piper-ljspeech-v1:" + text).utf8)).map { String(format: "%02x", $0) }.joined()
                 let url = cache.appendingPathComponent(hash + ".wav")
                 if !FileManager.default.fileExists(atPath: url.path) {
                     await VigilAI.shared.enrolAutomatically()

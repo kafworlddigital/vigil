@@ -1,6 +1,6 @@
 """Vigil-only, stateless inference. No shared-brain imports, histories, prompt logs or screen files."""
 from pathlib import Path
-import base64,concurrent.futures,datetime,email.utils,hashlib,hmac,http.server,json,os,secrets,ssl,threading,time,urllib.request,urllib.error
+import base64,subprocess,sys,concurrent.futures,datetime,email.utils,hashlib,hmac,http.server,json,os,secrets,ssl,threading,time,urllib.request,urllib.error
 
 ROOT=Path(__file__).resolve().parent
 PRIVATE=Path(os.environ.get('VIGIL_PRIVATE','/srv/projects/vigil-private'))
@@ -8,6 +8,29 @@ def stamp(value=None):return datetime.datetime.fromtimestamp(value or time.time(
 def atomic(path,value):
     temp=path.with_suffix('.tmp');temp.write_text(json.dumps(value,indent=2));temp.chmod(0o600);temp.replace(path)
 def digest(value):return hashlib.sha256(value.encode()).hexdigest()
+
+class NeuralSpeech:
+    def __init__(self, private):
+        self.cache=private/'speech-cache';self.cache.mkdir(mode=0o700,exist_ok=True)
+        self.gate=threading.BoundedSemaphore(1)
+    def render(self,text):
+        if not isinstance(text,str) or not 1<=len(text.strip())<=300:raise ValueError('invalid text')
+        if not self.gate.acquire(blocking=False):raise RuntimeError('busy')
+        try:
+            path=self.cache/(digest('piper-alan-v1:'+text)+'.wav')
+            if not path.exists():
+                temp=path.with_suffix('.tmp')
+                try:
+                    result=subprocess.run([sys.executable,str(ROOT/'vigil_speech.py'),str(temp)],input=text.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=12,
+                        env={**os.environ,'OMP_NUM_THREADS':'1','OPENBLAS_NUM_THREADS':'1'})
+                    if result.returncode or not temp.exists() or not 44<temp.stat().st_size<2_000_000:raise RuntimeError('unavailable')
+                    temp.chmod(0o600);temp.replace(path)
+                finally:
+                    temp.unlink(missing_ok=True)
+            result=path.read_bytes()
+            for old in sorted(self.cache.glob('*.wav'),key=lambda p:p.stat().st_mtime,reverse=True)[64:]:old.unlink(missing_ok=True)
+            return result
+        finally:self.gate.release()
 
 class BrainRouter:
     def __init__(self,models,keys,transport=None,state_path=None):
@@ -157,6 +180,7 @@ def serve():
     private=PRIVATE;private.mkdir(mode=0o700,exist_ok=True)
     keys=json.loads((private/'job3-keys.json').read_text())
     registry=DeviceRegistry(private/'devices.json')
+    speech=NeuralSpeech(private)
     router=BrainRouter(json.loads((ROOT/'models.json').read_text()),keys,state_path=private/'brain-health.json')
     def monitor():
         while True:
@@ -197,6 +221,12 @@ def serve():
                 token=registry.activate(str(data.get('code','')),str(data.get('edition','')),str(data.get('device','')))
                 self.reply(200,{'token':token}) if token else self.reply(401,{'error':'invalid or expired activation code'});return
             if not registry.valid(self.headers.get('Authorization','').removeprefix('Bearer ')):self.reply(401,{'error':'auth'});return
+            if self.path.endswith('/speech'):
+                if registry.valid(self.headers.get('Authorization','').removeprefix('Bearer ')).get('edition')!='keith':self.reply(403,{'error':'Keith edition only'});return
+                try:audio=speech.render(data.get('text') if isinstance(data,dict) else None)
+                except ValueError:self.reply(400,{'error':'invalid speech'});return
+                except Exception:self.reply(503,{'error':'speech unavailable'});return
+                self.send_response(200);self.send_header('Content-Type','audio/wav');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(audio)));self.end_headers();self.wfile.write(audio);return
             if self.path.endswith('/test'):
                 router.probe_all()
                 deadline=time.monotonic()+22

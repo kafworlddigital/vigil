@@ -15,6 +15,11 @@ import CoreImage.CIFilterBuiltins
     var body:some Scene {
         WindowGroup("Vigil",id:"main") { VigilProofScreen(state:engine.state){MacRoot(engine:engine,server:server)}.frame(minWidth:640,minHeight:640) }
             .defaultSize(width:760,height:800)
+            .commands {
+                CommandGroup(replacing: .appSettings) {
+                    Button("Settings…") { showSettings() }.keyboardShortcut(",", modifiers: .command)
+                }
+            }
         MenuBarExtra("Vigil",systemImage:"eye"){
             Text(engine.state.session?.task ?? "Ready when you are.")
             Text(engine.state.session?.detail ?? engine.state.notice)
@@ -34,11 +39,16 @@ import CoreImage.CIFilterBuiltins
             Button("Voice and vision introduction"){VoiceVisionController.shared.showIntroduction=true}
             #endif
             Button("Help"){openWindow(id:"help")}
-            SettingsLink()
+            Button("Settings…") { showSettings() }.keyboardShortcut(",", modifiers: .command)
             Divider();Button("Quit Vigil"){NSApplication.shared.terminate(nil)}
         }
         Window("Vigil Help",id:"help"){VigilHelpView().frame(minWidth:560,minHeight:600)}
-        SwiftUI.Settings { VigilSettingsView(state:engine.state,changed:engine.updateSettings).frame(width:460).padding().vigilVoiceVision() }
+        Window("Vigil Settings", id: "settings") {
+            VigilSettingsView(state:engine.state,changed:engine.updateSettings).frame(minWidth:560,minHeight:600).vigilVoiceVision()
+        }.defaultSize(width:600,height:740)
+    }
+    private func showSettings() {
+        openWindow(id: "settings"); NSApp.activate(ignoringOtherApps: true)
     }
     #else
     var body:some Scene { WindowGroup{PhoneRoot()} }
@@ -101,7 +111,13 @@ struct FocusDashboard:View {
     var body:some View {
         ScrollView {
             VStack(alignment:.leading,spacing:24){
-                HStack{VStack(alignment:.leading,spacing:5){Text(CompanionPreferences().name).font(.largeTitle.weight(.semibold));Text("A little company for the task ahead.").font(.subheadline).foregroundStyle(.secondary)};Spacer();Button(action:{showSettings=true}){Image(systemName:"gearshape")}.buttonStyle(.plain).accessibilityLabel("Settings")}
+                HStack{VStack(alignment:.leading,spacing:5){Text(CompanionPreferences().name).font(.largeTitle.weight(.semibold));Text("A little company for the task ahead.").font(.subheadline).foregroundStyle(.secondary)};Spacer();Button(action:{
+                    #if os(macOS)
+                    VigilSettingsAccess.shared.open()
+                    #else
+                    showSettings=true
+                    #endif
+                }){Image(systemName:"gearshape")}.buttonStyle(.plain).accessibilityLabel("Settings")}
                 HStack(spacing:7){Circle().fill(connected ? Color.green:Color.orange).frame(width:7,height:7);Text(connectionText).font(.caption).foregroundStyle(.secondary);Spacer();Button("Pair",action:pairing).font(.caption)}
                 #if VIGIL_VOICE_VISION
                 VigilVoiceBar()
@@ -193,6 +209,10 @@ struct VigilSettingsView:View {
         ScrollView{VStack(alignment:.leading,spacing:20){
             HStack{Text("Settings").font(.title2.weight(.semibold));Spacer();Button("Done"){dismiss()}}
             Text("Vigil \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0") · Build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")").font(.subheadline).foregroundStyle(.secondary)
+            #if VIGIL_VOICE_VISION
+            VigilTryEverything()
+            Divider()
+            #endif
             VStack(alignment:.leading,spacing:8){Text("Screen checks").font(.headline);Text("Every \(Int(value.safeInterval)) seconds");Slider(value:$value.interval,in:30...120,step:30).onChange(of:value.interval){_,_ in changed(value)};Text("Checks run only during a declared task. Free requests have a daily limit; the timer keeps running if they run out.").font(.caption).foregroundStyle(.secondary)}
             Button("Help"){showHelp=true}
             Link("Report a problem",destination:VigilSupport.reportURL)
@@ -215,7 +235,7 @@ struct VigilSettingsView:View {
             Toggle("Show desktop face",isOn:$faceVisible).onChange(of:faceVisible){_,v in VigilCharacterHost.shared.setVisible(v)}
             Text("Face size · \(Int(faceWidth)) points").font(.caption)
             Slider(value:$faceWidth,in:160...440,step:20).onChange(of:faceWidth){_,_ in VigilCharacterHost.shared.resize()}
-            Text("Hold Option and drag the face to move it. Ordinary clicks pass through.").font(.caption)
+            Text("Click the face to listen. Right-click for Settings; hold Option and drag to move it.").font(.caption)
             Picker("Cursor trail",selection:$trail){Text("Comet").tag("comet");Text("String").tag("string");Text("None").tag("none")}
             #endif
             #if os(macOS)
@@ -233,13 +253,15 @@ struct MacRoot:View {
     @ObservedObject var engine:MacFocusEngine
     @ObservedObject var server:MacDeviceServer
     @State private var showPair=false
+    @Environment(\.openWindow) private var openWindow
+    private func openSettingsWindow() { openWindow(id: "settings"); NSApp.activate(ignoringOtherApps: true) }
     var body:some View {
         FocusDashboard(state:engine.state,connected:true,connectionText:server.phones.isEmpty ? "Mac ready · no companion paired yet":"Connected · \(server.phones.joined(separator:", "))",command:{name,text in
             if name=="focusStart",!CGPreflightScreenCaptureAccess(){_ = CGRequestScreenCaptureAccess()}
             engine.receive(Packet(command:name,text:text)){_ in}
         },pairing:{showPair=true})
         .safeAreaInset(edge:.bottom){if !engine.error.isEmpty{Text(engine.error).font(.callout).padding()}}
-        .task{engine.onBroadcast=server.broadcast;server.onPacket=engine.receive;server.start();VigilCharacterHost.shared.start(server:server);engine.sync()}
+        .task{VigilSettingsAccess.shared.show = { openSettingsWindow() }; engine.onBroadcast=server.broadcast;server.onPacket=engine.receive;server.start();VigilCharacterHost.shared.start(server:server);engine.sync()}
         .sheet(isPresented:$showPair){MacPairView(record:server.pairing)}
         .vigilVoiceVision()
     }

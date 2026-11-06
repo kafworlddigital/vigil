@@ -5,6 +5,20 @@ import FoundationNetworking
 #endif
 
 final class VoiceVisionTests: XCTestCase {
+    func testOnlyNaturalEnglishVoicesAreOffered() {
+        for id in ["com.apple.eloquence.en-GB.Rocko", "com.apple.speech.synthesis.voice.BadNews", "com.apple.speech.synthesis.voice.Bubbles", "com.apple.voice.super-compact.en-GB.Daniel"] {
+            XCTAssertFalse(VoiceVisionPolicy.naturalVoice(identifier:id,language:"en-GB"))
+        }
+        XCTAssertTrue(VoiceVisionPolicy.naturalVoice(identifier:"com.apple.voice.enhanced.en-GB.Daniel",language:"en-GB"))
+        XCTAssertTrue(VoiceVisionPolicy.naturalVoice(identifier:"com.apple.siri.natural.Arthur",language:"en-GB"))
+        XCTAssertFalse(VoiceVisionPolicy.naturalVoice(identifier:"com.apple.voice.enhanced.fr-FR.Thomas",language:"fr-FR"))
+    }
+    func testNaturalVoiceQualityBeatsLocaleAndAlphabeticalOrder() {
+        let compact = VoiceVisionPolicy.voiceRank(identifier:"com.apple.voice.compact.en-GB.Daniel",language:"en-GB",quality:1)
+        let enhanced = VoiceVisionPolicy.voiceRank(identifier:"com.apple.voice.enhanced.en-US.Ava",language:"en-US",quality:2)
+        let premium = VoiceVisionPolicy.voiceRank(identifier:"com.apple.voice.premium.en-GB.Daniel",language:"en-GB",quality:3)
+        XCTAssertGreaterThan(enhanced,compact); XCTAssertGreaterThan(premium,enhanced)
+    }
     func testContinuousRecognitionFindsNewNameAfterBackgroundSpeech() {
         XCTAssertEqual(VigilVoiceCommand.wakePhrase(in: "Some earlier conversation. Virgil, what is this?"), "virgil what is this")
         XCTAssertEqual(VigilVoiceCommand.wakePhrase(in: "Vigil hello. Vigil, look at me"), "vigil look at me")

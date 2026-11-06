@@ -80,6 +80,14 @@ public enum VigilVoiceCommand: Equatable, Sendable {
 }
 
 public enum VoiceVisionPolicy {
+    public static func naturalVoice(identifier: String, language: String) -> Bool {
+        guard language.hasPrefix("en"), !identifier.contains("eloquence"), !identifier.contains("super-compact") else { return false }
+        return identifier.hasPrefix("com.apple.voice.") || identifier.hasPrefix("com.apple.siri.natural.")
+    }
+    public static func voiceRank(identifier: String, language: String, quality: Int) -> Int {
+        quality * 1000 + (language == "en-GB" ? 100 : language == "en-US" ? 80 : 0)
+            + (["Zoe", "Ava", "Daniel", "Arthur", "Martha"].firstIndex(where: identifier.hasSuffix).map { 20 - $0 } ?? 0)
+    }
     public static let shortLines = ["Back to it.", "Focus.", "One thing."]
     public static let unavailable = "I couldn't get a clear answer just now."
     public static func volume(_ value: Double) -> Float {

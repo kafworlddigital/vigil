@@ -1039,6 +1039,12 @@ final class CursorOverlay: NSObject {
         view.engine.talkUntil = CACurrentMediaTime() + seconds
     }
 
+    func setSleeping(_ sleeping: Bool) {
+        displayLink?.isPaused = sleeping
+        lastTime = 0
+        if sleeping { window?.orderOut(nil) } else { window?.orderFrontRegardless() }
+    }
+
     private func makeWindow() {
         guard let screen = NSScreen.screens.first else { return }
         if let window {

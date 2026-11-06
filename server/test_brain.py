@@ -1,13 +1,29 @@
 import unittest,tempfile,time,json,io,urllib.error
 from unittest.mock import patch
 from pathlib import Path
-from vigil_brain import BrainRouter,Failure,DeviceRegistry,digest,enrol_device
+from vigil_brain import BrainRouter,Failure,DeviceRegistry,digest,enrol_device,NeuralSpeech
 
 def candidate(provider,model,vision=True):
  hosts={'opencode-go':'opencode.ai','openrouter':'openrouter.ai','nvidia':'integrate.api.nvidia.com'}
  return dict(provider=provider,model=model,vision=vision,endpoint='https://'+hosts[provider]+'/v1/chat/completions',protocol='chat')
 
 class BrainTests(unittest.TestCase):
+ def test_neural_cache_reuses_audio_without_synthesis_and_has_bounded_names(self):
+  with tempfile.TemporaryDirectory() as folder:
+   speech=NeuralSpeech(Path(folder));text='Synthetic speech.'
+   path=speech.cache/(digest('piper-alan-v1:'+text)+'.wav')
+   path.write_bytes(b'RIFF'+b'0'*100)
+   with patch('vigil_brain.subprocess.run') as run:
+    self.assertEqual(speech.render(text),path.read_bytes());run.assert_not_called()
+   self.assertNotIn(text,path.name)
+ def test_neural_rejects_invalid_text_and_parallel_synthesis(self):
+  with tempfile.TemporaryDirectory() as folder:
+   speech=NeuralSpeech(Path(folder))
+   for text in ['',None,123,'x'*301]:
+    with self.assertRaises(ValueError):speech.render(text)
+   speech.gate.acquire()
+   with self.assertRaises(RuntimeError):speech.render('Synthetic')
+   speech.gate.release()
  def setUp(self):
   self.models=[candidate('opencode-go','a'),candidate('openrouter','b:free'),candidate('nvidia','c')]
   self.keys={m['provider']:'synthetic' for m in self.models}

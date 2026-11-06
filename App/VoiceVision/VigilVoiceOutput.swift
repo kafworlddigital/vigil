@@ -1,6 +1,7 @@
 #if VIGIL_VOICE_VISION
 import SwiftUI
 import AVFoundation
+import CryptoKit
 #if os(macOS)
 import AppKit
 import CoreAudio
@@ -15,6 +16,7 @@ import UIKit
     private var player: AVAudioPlayer?
     private var watchdog: Task<Void, Never>?
     private var utteranceID = UUID()
+    private var renderID = UUID()
     private var file: AVAudioFile?
     private var outputURL: URL?
     private var activeText = ""
@@ -36,9 +38,80 @@ import UIKit
     var onFinished: (() -> Void)?
     override init() { super.init(); synthesizer.delegate = self }
     var enabled: Bool { UserDefaults.standard.object(forKey: "vigil.voice.spoken") as? Bool ?? true }
-    static let voices: [AVSpeechSynthesisVoice] = {
-        AVSpeechSynthesisVoice.speechVoices().sorted { ($0.language, $0.name) < ($1.language, $1.name) }
-    }()
+    static var voices: [AVSpeechSynthesisVoice] {
+        AVSpeechSynthesisVoice.speechVoices().filter {
+            VoiceVisionPolicy.naturalVoice(identifier: $0.identifier, language: $0.language)
+        }.sorted {
+            let a = VoiceVisionPolicy.voiceRank(identifier: $0.identifier, language: $0.language, quality: $0.quality.rawValue)
+            let b = VoiceVisionPolicy.voiceRank(identifier: $1.identifier, language: $1.language, quality: $1.quality.rawValue)
+            return a == b ? $0.identifier < $1.identifier : a > b
+        }
+    }
+    static var bestVoice: AVSpeechSynthesisVoice? { voices.first }
+    static func voiceTitle(_ voice: AVSpeechSynthesisVoice) -> String {
+        let quality = voice.quality == .premium ? "Premium" : voice.quality == .enhanced ? "Enhanced" : "Standard"
+        let name = voice.identifier.hasSuffix("Arthur") ? "Arthur" : voice.identifier.hasSuffix("Martha") ? "Martha" : voice.name
+        return "\(name) · \(voice.language) · \(quality)"
+    }
+    static func migrateVoice() {
+        let chosen = UserDefaults.standard.string(forKey: "vigil.voice.identifier") ?? ""
+        if !chosen.isEmpty && chosen != "neural" && !voices.contains(where: { $0.identifier == chosen }) {
+            UserDefaults.standard.set("", forKey: "vigil.voice.identifier")
+        }
+    }
+    private var neuralTask: Task<Void, Never>?
+    private var triedNeural = false
+    private var triedOffline = false
+    private var failedVoices: Set<String> = []
+    private var renderingVoice: String?
+    private(set) var selectedVoice = ""
+    #if os(macOS)
+    private var speechCache: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Vigil/Speech", isDirectory: true)
+    }
+    private func neural(_ text: String, token: UUID) {
+        triedNeural = true; backend = "Piper neural → AVAudioPlayer"
+        neuralTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let hash = SHA256.hash(data: Data(("piper-alan-v1:" + text).utf8)).map { String(format: "%02x", $0) }.joined()
+                let cache = self.speechCache
+                try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+                let url = cache.appendingPathComponent(hash + ".wav")
+                if !FileManager.default.fileExists(atPath: url.path) {
+                    guard let credential = KeyVault.read(service: "com.kafworlddigital.vigil.brain") else { throw RouterError.unavailable }
+                    var request = URLRequest(url: VigilAI.brainURL.appendingPathComponent("speech"), timeoutInterval: 14)
+                    request.httpMethod = "POST"; request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.httpBody = try JSONSerialization.data(withJSONObject: ["text": text])
+                    let (data, response) = try await URLTransport().data(for: request)
+                    guard response.statusCode == 200, data.count > 44, data.count < 2_000_000, data.prefix(4) == Data("RIFF".utf8) else { throw RouterError.unavailable }
+                    try Task.checkCancellation()
+                    guard self.utteranceID == token else { return }
+                    try data.write(to: url, options: .atomic)
+                    try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+                    let files = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+                    let oldest = files.sorted { ((try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) < ((try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) }
+                    for old in oldest.prefix(max(0, oldest.count - 64)) { try? FileManager.default.removeItem(at: old) }
+                }
+                try Task.checkCancellation(); guard self.utteranceID == token else { return }
+                self.backend = "Piper neural → AVAudioPlayer"; self.selectedVoice = "Piper Alan · English · Neural (cached)"
+                self.playRendered(token, from: url)
+            } catch {
+                guard self.utteranceID == token else { return }
+                let offline = Self.voices.first(where: { !self.failedVoices.contains($0.identifier) })
+                self.renderApple(text, token: token, voice: offline)
+            }
+        }
+    }
+    private func renderApple(_ text: String, token: UUID, voice: AVSpeechSynthesisVoice?) {
+        guard let voice else { finish(); return }
+        renderingVoice = voice.identifier; selectedVoice = Self.voiceTitle(voice)
+        let line = AVSpeechUtterance(string: text); line.voice = voice
+        line.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
+        render(line, token: token)
+    }
+    #endif
     func speak(_ text: String, entireLine: Bool = false, audition: Bool = false) {
         guard (enabled || audition), !VoiceVisionController.proofMode else { return }
         stop()
@@ -47,11 +120,11 @@ import UIKit
         try? AVAudioSession.sharedInstance().setActive(true)
         #endif
         let line = AVSpeechUtterance(string: entireLine ? String(text.prefix(300)) : VoiceVisionPolicy.sentence(text))
+        Self.migrateVoice()
         let identifier = UserDefaults.standard.string(forKey: "vigil.voice.identifier") ?? ""
-        line.voice = AVSpeechSynthesisVoice(identifier: identifier)
-            ?? Self.voices.first(where: { $0.language == "en-GB" })
-            ?? Self.voices.first(where: { $0.language.hasPrefix("en") })
-            ?? Self.voices.first
+        line.voice = Self.voices.first(where: { $0.identifier == identifier }) ?? Self.bestVoice
+        selectedVoice = line.voice.map(Self.voiceTitle) ?? "Apple English"
+        renderingVoice = line.voice?.identifier
         line.volume = VoiceVisionPolicy.volume(UserDefaults.standard.object(forKey: "vigil.voice.volume") as? Double ?? 0.5)
         line.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
         speaking = true
@@ -59,8 +132,21 @@ import UIKit
         guard line.volume > 0 else { finish(); return }
         line.volume = 1 // Apply the user's volume once, at AVAudioPlayer output.
         activeText = line.speechString; renderedPeak = 0; playerStarted = false
-        let token = utteranceID
+        let token = utteranceID; triedNeural = false; triedOffline = false; failedVoices = []
+        if identifier == "neural" || (identifier.isEmpty && (line.voice?.quality.rawValue ?? 0) < 2) {
+            neural(activeText, token: token); return
+        }
+        render(line, token: token)
+        #else
+        synthesizer.speak(line)
+        #endif
+    }
+    #if os(macOS)
+    private func render(_ line: AVSpeechUtterance, token: UUID) {
+        renderID = UUID(); let attempt = renderID
+        line.volume = 1; file = nil
         backend = "AVSpeechSynthesizer → AVAudioPlayer"
+        if let outputURL { try? FileManager.default.removeItem(at: outputURL) }
         outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("vigil-speech-\(token).caf")
         // Rendering to PCM avoids macOS's occasionally silent direct speech route and
         // lets us verify a non-silent signal before normal background audio playback.
@@ -78,8 +164,11 @@ import UIKit
             }
             // Keep callbacks in order, including the final empty buffer.
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.utteranceID == token, self.backend.hasPrefix("AVSpeech") else { return }
-                if copy.frameLength == 0 { self.playRendered(token); return }
+                guard let self, self.utteranceID == token, self.renderID == attempt, self.backend.hasPrefix("AVSpeech") else { return }
+                if copy.frameLength == 0 {
+                    if self.renderedPeak < 0.00001 { self.fallback(token) } else { self.playRendered(token) }
+                    return
+                }
                 do {
                     if self.file == nil, let url = self.outputURL { self.file = try AVAudioFile(forWriting: url, settings: copy.format.settings) }
                     if let channels = copy.floatChannelData {
@@ -93,15 +182,13 @@ import UIKit
         }
         watchdog = Task { @MainActor [weak self] in
             do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
-            guard let self, self.utteranceID == token, !self.playerStarted else { return }
+            guard let self, self.utteranceID == token, self.renderID == attempt, !self.playerStarted else { return }
             self.fallback(token)
         }
-        #else
-        synthesizer.speak(line)
-        #endif
     }
+    #endif
     func stop() {
-        utteranceID = UUID(); watchdog?.cancel(); watchdog = nil
+        utteranceID = UUID(); watchdog?.cancel(); watchdog = nil; neuralTask?.cancel(); neuralTask = nil
         synthesizer.stopSpeaking(at: .immediate); speaking = false
         player?.stop(); player = nil; file = nil
         #if os(macOS)
@@ -129,12 +216,13 @@ import UIKit
         Task { @MainActor in if self.player === player { self.finish() } }
     }
     #if os(macOS)
-    private func playRendered(_ token: UUID) {
+    private func playRendered(_ token: UUID, from source: URL? = nil) {
         guard token == utteranceID, !playerStarted else { return }
         file = nil
-        guard let url = outputURL else { fallback(token); return }
+        guard let url = source ?? outputURL else { fallback(token); return }
         do {
             let audio = try AVAudioPlayer(contentsOf: url)
+            guard audio.duration > 0.05 else { fallback(token); return }
             audio.currentDevice = VigilAudioRoute.snapshot().uid
             audio.isMeteringEnabled = true
             audio.volume = VoiceVisionPolicy.volume(UserDefaults.standard.object(forKey: "vigil.voice.volume") as? Double ?? 0.5)
@@ -145,13 +233,21 @@ import UIKit
     }
     private func fallback(_ token: UUID) {
         guard token == utteranceID, !playerStarted else { return }
+        renderID = UUID()
         watchdog?.cancel(); synthesizer.stopSpeaking(at: .immediate); file = nil
+        if let renderingVoice { failedVoices.insert(renderingVoice) }
+        if !triedNeural { neural(activeText, token: token); return }
+        if !triedOffline, let offline = Self.voices.first(where: { !failedVoices.contains($0.identifier) && $0.quality == .default }) {
+            triedOffline = true; renderApple(activeText, token: token, voice: offline); return
+        }
         guard backend != "say → AVAudioPlayer" else { finish(); return }
         // Both fallback renderers write a local file, preserving the app volume.
         if backend.hasPrefix("AVSpeech") {
             backend = "NSSpeechSynthesizer → AVAudioPlayer"
             let voice = NSSpeechSynthesizer.availableVoices.first {
-                (NSSpeechSynthesizer.attributes(forVoice: $0)[.localeIdentifier] as? String)?.hasPrefix("en_GB") == true
+                let attributes = NSSpeechSynthesizer.attributes(forVoice: $0)
+                let name = attributes[.name] as? String ?? ""
+                return ["Daniel", "Samantha", "Karen", "Moira"].contains(name) && !$0.rawValue.contains("super-compact")
             }
             legacy = NSSpeechSynthesizer(voice: voice)
             legacy?.delegate = self
@@ -167,7 +263,7 @@ import UIKit
         guard let url = outputURL else { finish(); return }
         try? FileManager.default.removeItem(at: url)
         let process = Process(); process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
-        process.arguments = ["-o", url.path, "--data-format=LEF32@22050", "--", activeText]
+        process.arguments = ["-v", "Daniel", "-o", url.path, "--data-format=LEF32@22050", "--", activeText]
         process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
         process.terminationHandler = { [weak self] process in
             Task { @MainActor in

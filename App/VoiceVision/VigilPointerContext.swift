@@ -11,6 +11,7 @@ struct VigilPointerContext {
     @MainActor static func read() async throws -> Self {
         try check()
         guard AXIsProcessTrusted() else { throw ContextFailure.accessibility }
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1)
         let point = CGEvent(source: nil)?.location ?? .zero
         var hovered: AXUIElement?
         let status = AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &hovered)
@@ -44,7 +45,9 @@ struct VigilPointerContext {
         configuration.showsCursor = false; configuration.capturesAudio = false
         let filter = SCContentFilter(display: display, excludingApplications: content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }, exceptingWindows: [])
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
-        try check()
+        try Task.checkCancellation(); try check()
+        let latest = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        try WorkScreenGuard.shareable(latest)
         guard let jpeg = NSBitmapImageRep(cgImage: image).representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else { throw RouterError.unavailable }
         return Self(text: "Small crop around the pointer", image: jpeg, application: NSWorkspace.shared.frontmostApplication?.localizedName ?? "Screen")
     }

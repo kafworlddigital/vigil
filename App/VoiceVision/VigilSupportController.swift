@@ -146,6 +146,24 @@ import AppKit
         await frameTask?.value
         camera = nil
     }
+    func tryTiredCheck() {
+        guard !checkingFrame, !VoiceVisionController.shared.busy else { return }
+        frameTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.checkingFrame = false; self.frameTask = nil; self.camera = nil }
+            if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined { _ = await AVCaptureDevice.requestAccess(for: .video) }
+            guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
+                self.tiredMessage = "Allow Camera in macOS Settings for a tired check."; VoiceVisionController.shared.announce(self.tiredMessage, speak: false); return
+            }
+            self.checkingFrame = true; self.tiredMessage = "Camera on briefly · one local frame"
+            let sampler = VigilTiredFrame(); self.camera = sampler
+            do {
+                let result = try await sampler.check(); try Task.checkCancellation()
+                self.tiredMessage = result == .covered ? "Camera off · dark or covered frame skipped." : "Camera off · local check complete. Nothing saved or sent."
+                VoiceVisionController.shared.announce(self.tiredMessage, speak: false)
+            } catch { self.tiredMessage = "Camera off · check unavailable. Nothing saved or sent." }
+        }
+    }
     private func tick() {
         guard !VoiceVisionController.proofMode, !VigilEdition.macy else { return }
         let uptime = ProcessInfo.processInfo.systemUptime, delta = uptime - lastTick; lastTick = uptime

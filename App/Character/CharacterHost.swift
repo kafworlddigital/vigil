@@ -15,6 +15,11 @@ final class Settings {
     var mood:Mood = .listening
     var trail:PointerTrail { PointerTrail(rawValue:UserDefaults.standard.string(forKey:"vigil.pointer.trail") ?? "comet") ?? .comet }
 }
+@MainActor final class VigilSettingsAccess {
+    static let shared = VigilSettingsAccess()
+    var show: (() -> Void)?
+    func open() { show?() }
+}
 final class VigilDelegate:NSObject,NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification:Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -22,6 +27,7 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         VigilFeatureProof.begin()
         VigilFeatureProof.beginNudgeCheck()
         VigilFeatureProof.beginRepairCheck()
+        VigilFeatureProof.beginPolishCheck()
         #endif
         let args=ProcessInfo.processInfo.arguments
         if let i=args.firstIndex(of:"--vigil-test-connections"),i+1<args.count {
@@ -61,17 +67,31 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         p.contentView=NSHostingView(rootView:FaceView(animator:animator,transparent:true)
             .contentShape(Rectangle())
             .onTapGesture { if !NSEvent.modifierFlags.contains(.option) { VoiceVisionController.shared.startManualListening() } }
+            .contextMenu {
+                Button("Settings…") { VigilSettingsAccess.shared.open() }.keyboardShortcut(",", modifiers: .command)
+                Button("Try everything") { VoiceVisionController.shared.openSettings() }
+                Button("Listen") { VoiceVisionController.shared.startManualListening() }
+            }
             .accessibilityLabel("Vigil face. Click to listen, or press \(VoiceVisionController.shared.hotKeyLabel).")
             .help("Click to listen · \(VoiceVisionController.shared.hotKeyLabel) anywhere · Option-drag to move"))
         #else
         p.contentView=NSHostingView(rootView:FaceView(animator:animator,transparent:true))
         #endif
         panel=p;resize();setVisible(visible)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemSleep), name: NSWorkspace.willSleepNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemWake), name: NSWorkspace.didWakeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(displaysChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         cursor.onFace={ [weak self] frame in
             guard let self else{return}
             // Keep upstream's phone gaze: it sits BELOW the monitor and looks up at the mouse/buddy.
             // The added desktop face looks from its own eyes towards the cursor on any display.
             var face=frame
+            #if VIGIL_VOICE_VISION
+            let controller = VoiceVisionController.shared
+            if VigilVoiceOutput.shared.speaking { face.mood = .talking }
+            else if controller.busy { face.mood = .thinking }
+            else if controller.status == "Listening…" { face.mood = .listening }
+            #endif
             let global=CGEvent(source:nil)?.location ?? .zero
             let m=NSPoint(x:global.x,y:(NSScreen.screens.first?.frame.maxY ?? 0)-global.y)
             self.sampledMouse=global
@@ -91,6 +111,20 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         VigilProof.begin(host:self)
         poll=Timer.scheduledTimer(withTimeInterval:1.0/30,repeats:true){[weak self] _ in Task{@MainActor in self?.trackDrag()}}
     }
+    @objc private func displaysChanged() { resize() }
+    @objc private func systemSleep() {
+        poll?.invalidate(); poll=nil; panel?.orderOut(nil); cursor.setSleeping(true)
+        #if VIGIL_VOICE_VISION
+        VoiceVisionController.shared.systemSleep()
+        #endif
+    }
+    @objc private func systemWake() {
+        resize(); setVisible(visible); cursor.setSleeping(false)
+        if poll == nil { poll=Timer.scheduledTimer(withTimeInterval:1.0/30,repeats:true){[weak self] _ in Task{@MainActor in self?.trackDrag()}} }
+        #if VIGIL_VOICE_VISION
+        VoiceVisionController.shared.systemWake()
+        #endif
+    }
     func resize() {
         guard let p=panel,let screen=NSScreen.main else{return}
         let w=max(160,min(440,UserDefaults.standard.double(forKey:"vigil.face.width")==0 ? 260:UserDefaults.standard.double(forKey:"vigil.face.width")))
@@ -99,7 +133,9 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         let savedY=UserDefaults.standard.object(forKey:"vigil.face.y") as? Double
         let corner=CompanionPreferences().corner
         let area=screen.visibleFrame
-        let position=NSPoint(x:savedX ?? (corner.left ? area.minX+24:area.maxX-w-24),y:savedY ?? (corner.top ? area.maxY-h-24:area.minY+24))
+        let proposed=NSPoint(x:savedX ?? (corner.left ? area.minX+24:area.maxX-w-24),y:savedY ?? (corner.top ? area.maxY-h-24:area.minY+24))
+        let targetArea = NSScreen.screens.first(where: { $0.visibleFrame.intersects(CGRect(origin: proposed, size: CGSize(width:w,height:h))) })?.visibleFrame ?? area
+        let position=NSPoint(x:min(targetArea.maxX-w,max(targetArea.minX,proposed.x)),y:min(targetArea.maxY-h,max(targetArea.minY,proposed.y)))
         p.setFrame(NSRect(origin:position,size:NSSize(width:w,height:h)),display:true)
     }
     func placeInCorner(){

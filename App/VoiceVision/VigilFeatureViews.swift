@@ -16,7 +16,7 @@ struct VigilAnswerBubble: View {
                 if controller.busy { Button("Cancel") { controller.cancel() } }
                 else { Button { controller.dismissAnswer() } label: { Image(systemName: "xmark") }.accessibilityLabel("Dismiss answer") }
             }
-            if controller.voiceNeedsPermission { VigilVoicePermissionCard() }
+            if controller.voiceNeedsPermission && controller.answer.isEmpty && controller.status != "Listening…" { VigilVoicePermissionCard() }
             else if controller.showShortcutCard {
                 Label("Press \(controller.hotKeyLabel) to speak", systemImage: "keyboard").font(.headline)
                 Text("Or click my face. Change the shortcut in Settings.").font(.caption)
@@ -34,7 +34,7 @@ struct VigilVoicePermissionCard: View {
     @State private var requesting = false
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Let Vigil hear you", systemImage: "mic").font(.headline)
+            Label("Let Vigil help", systemImage: "hand.raised").font(.headline)
             Text(controller.permissionMessage).font(.callout).fixedSize(horizontal: false, vertical: true)
             Button("Allow") {
                 requesting = true
@@ -140,14 +140,18 @@ struct VigilFeatureSettings: View {
             Picker("Nudge style", selection: $style) {
                 ForEach(VigilNudgeStyle.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
             }.accessibilityIdentifier("features.nudgeStyle")
-            VigilNudgeTestButtons()
             Toggle("Spoken nudges and answers", isOn: $spoken).onChange(of: spoken) { _, value in
                 if !value { VigilVoiceOutput.shared.stop(); controller.resumeListening() }
             }
-            Picker("Apple voice", selection: $voice) {
-                Text("British English default").tag("")
-                ForEach(VigilVoiceOutput.voices, id: \.identifier) { Text("\($0.name) · \($0.language)").tag($0.identifier) }
-            }.disabled(!spoken)
+            HStack {
+                Picker("Voice", selection: $voice) {
+                    Text("Automatic · best natural English").tag("")
+                    Text("Piper Alan · free neural · Contabo").tag("neural")
+                    ForEach(VigilVoiceOutput.voices, id: \.identifier) { Text(VigilVoiceOutput.voiceTitle($0)).tag($0.identifier) }
+                }.accessibilityIdentifier("features.voicePicker")
+                Button("Preview") { controller.previewVoice() }.accessibilityIdentifier("features.voicePreview")
+            }
+            Text("Automatic prefers installed Apple Premium or Enhanced English. Otherwise free neural speech runs on your Contabo server and is cached. Apple's best installed voice works offline.").font(.caption).foregroundStyle(.secondary)
             HStack {
                 Text("Volume"); Slider(value: $volume, in: 0...1)
                 Text("\(Int(volume * 100))%").monospacedDigit().frame(width: 45)
@@ -189,7 +193,34 @@ struct VigilFeatureSettings: View {
             Button("Feature introduction and permissions") { controller.showIntroduction = true }
             VigilSupportSettings()
             VigilVoiceBar()
-        }.onAppear { controller.refreshVoicePermissions() }
+        }.onAppear { VigilVoiceOutput.migrateVoice(); controller.refreshVoicePermissions() }
+    }
+}
+
+struct VigilTryEverything: View {
+    @ObservedObject private var controller = VoiceVisionController.shared
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Try everything").font(.title2.weight(.semibold))
+            Text("Short previews. Reminder, meeting and break tests don't change your saved reminders, calendar or switches.").font(.caption).foregroundStyle(.secondary)
+            VigilNudgeTestButtons()
+            HStack {
+                Button("What is this?") { controller.tryFeature("pointer") }.accessibilityIdentifier("features.try.pointer")
+                Button("Look at me") { controller.tryFeature("camera") }.accessibilityIdentifier("features.try.camera")
+                Button("I’m stuck") { controller.tryFeature("stuck") }.accessibilityIdentifier("features.try.stuck")
+            }
+            HStack {
+                Button("Reminder") { controller.tryFeature("reminder") }.accessibilityIdentifier("features.try.reminder")
+                Button("Meeting warning") { controller.tryFeature("meeting") }.accessibilityIdentifier("features.try.meeting")
+                Button("Break nudge") { controller.tryFeature("break") }.accessibilityIdentifier("features.try.break")
+            }
+            HStack {
+                Button("Tired check") { controller.tryFeature("tired") }.accessibilityIdentifier("features.try.tired")
+                    .disabled(VigilSupportController.shared.checkingFrame)
+                Button("Sound check") { controller.soundCheck() }.disabled(controller.soundCheckRunning)
+            }
+            if controller.pointerCountdown > 0 { Text("Point at the item · \(controller.pointerCountdown)…").font(.callout).foregroundStyle(.secondary) }
+        }.disabled(controller.busy)
     }
 }
 
@@ -215,7 +246,7 @@ struct VigilFeatureIntroduction: View {
     init(initialPage: Int = 0) { _page = State(initialValue: min(Self.cards.count - 1, max(0, initialPage))) }
     static let cards: [(String, String, String)] = [
         ("Choose your nudge", "bell.badge", "Pick a chime, a little bounce, a colour flash, an eye wiggle or a spoken line. Try each in Settings. Motion stays around Vigil's face."),
-        ("A few quiet words", "speaker.wave.2", "‘Back to it.’ ‘Focus.’ ‘One thing.’ Choose a free Apple voice and volume, or switch speech off in Settings."),
+        ("A few quiet words", "speaker.wave.2", "‘Back to it.’ ‘Focus.’ ‘One thing.’ Automatic uses natural Apple English or cached free neural speech from your server. Preview the voice in Settings, or switch speech off."),
         ("Vigil, what is this?", "cursorarrow.rays", "On Mac, point at something and ask. Vigil reads Accessibility text first, or sends a small cursor crop. You hear one sentence and see a bubble by the face. Other apps stay private on iPhone and iPad."),
         ("A small celebration", "sparkles", "A short sparkle around the face and a light haptic tap mark an answer. Haptics depend on your hardware; Reduce Motion uses a gentle glow."),
         ("Vigil, look at me", "camera", "Only your request starts a video clip. A visible indicator stays on during the four-second video and audio clip. Ask your question while it records. Only three small frames and locally recognised words are sent. The temporary clip is removed after the answer unless you enable saving."),

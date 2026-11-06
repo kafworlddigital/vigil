@@ -11,6 +11,146 @@ import ApplicationServices
 /// Explicit bounded evidence modes: silent cloud previews, or an authorised
 /// local hardware check. Neither mode sends a provider request.
 @MainActor enum VigilFeatureProof {
+    /// Authorised native QA: synthetic screen text and real speaker-to-C922 commands.
+    static func beginPolishCheck() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "--vigil-polish-check"), index + 1 < args.count else { return }
+        let folder = URL(fileURLWithPath: args[index + 1], isDirectory: true)
+        Task { @MainActor in
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            let controller = VoiceVisionController.shared, voice = VigilVoiceOutput.shared, wake = controller.wake
+            controller.refreshVoicePermissions()
+            var result: [String: Any] = ["build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?",
+                "accessibility": AXIsProcessTrusted(), "screenRecording": CGPreflightScreenCaptureAccess(),
+                "microphone": AVCaptureDevice.authorizationStatus(for: .audio).rawValue,
+                "speech": SFSpeechRecognizer.authorizationStatus().rawValue,
+                "camera": AVCaptureDevice.authorizationStatus(for: .video).rawValue,
+                "permissionMessage": controller.permissionMessage,
+                "output": VigilAudioRoute.snapshot().dictionary,
+                "naturalVoices": VigilVoiceOutput.voices.map { ["id":$0.identifier,"quality":$0.quality.rawValue] }]
+            @MainActor func save(_ window: NSWindow?, _ name: String) {
+                guard let view = window?.contentView else { return }
+                view.layoutSubtreeIfNeeded(); view.displayIfNeeded()
+                guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: folder.appendingPathComponent(name + ".png")) }
+            }
+            @MainActor func waitVoice() async -> [[String: Any]] {
+                var samples: [[String: Any]] = []
+                for _ in 0..<300 {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    if voice.isPlaying { samples.append(["time":voice.playbackTime,"peakDBFS":voice.playbackPower,"device":voice.outputDevice]) }
+                    if !voice.speaking { break }
+                }
+                return samples
+            }
+            let defaults = UserDefaults.standard
+            let chosen = defaults.string(forKey:"vigil.voice.identifier")
+            let hadWake = defaults.object(forKey:"vigil.voice.wake")
+            let hadIntro = defaults.object(forKey:"vigil.voice.introduced")
+            defer {
+                if let chosen { defaults.set(chosen,forKey:"vigil.voice.identifier") } else { defaults.removeObject(forKey:"vigil.voice.identifier") }
+                if let hadWake { defaults.set(hadWake,forKey:"vigil.voice.wake") } else { defaults.removeObject(forKey:"vigil.voice.wake") }
+                if let hadIntro { defaults.set(hadIntro,forKey:"vigil.voice.introduced") } else { defaults.removeObject(forKey:"vigil.voice.introduced") }
+                wake.stop(); voice.stop(); controller.resumeListening()
+            }
+            wake.stop(); voice.stop()
+            defaults.set("",forKey:"vigil.voice.identifier")
+            controller.previewVoice(); result["automaticSpeechPlayback"] = await waitVoice()
+            result["automaticVoice"] = voice.selectedVoice; result["automaticBackend"] = voice.backend
+            voice.stop(); wake.stop()
+            defaults.set("neural",forKey:"vigil.voice.identifier")
+            controller.previewVoice(); result["neuralPlayback"] = await waitVoice()
+            result["neuralVoice"] = voice.selectedVoice; result["neuralBackend"] = voice.backend
+            voice.stop(); wake.stop(); defaults.set("",forKey:"vigil.voice.identifier")
+            if let offline = VigilVoiceOutput.voices.first(where: { $0.quality == .default }) {
+                defaults.set(offline.identifier,forKey:"vigil.voice.identifier")
+                controller.previewVoice();result["offlineApplePlayback"] = await waitVoice()
+                result["offlineAppleVoice"] = voice.selectedVoice;result["offlineAppleBackend"] = voice.backend
+                voice.stop();wake.stop();defaults.set("",forKey:"vigil.voice.identifier")
+            }
+            // Sound check exercises the real shared action and chime output.
+            controller.soundCheck()
+            for _ in 0..<200 { try? await Task.sleep(nanoseconds:100_000_000); if !controller.soundCheckRunning { break } }
+            result["soundCheck"] = controller.soundCheckMessage; wake.stop(); voice.stop()
+            var effects: [String: Any] = [:]
+            for style in VigilNudgeStyle.allCases {
+                controller.effectAt = .distantPast; save(VigilCharacterHost.shared.panel,"face-before-"+style.rawValue)
+                VigilFeedback.testNudge(style)
+                try? await Task.sleep(nanoseconds:350_000_000)
+                save(VigilCharacterHost.shared.panel,"face-during-"+style.rawValue)
+                if style == .spokenLine { effects[style.rawValue] = await waitVoice() }
+                else if style == .chime { effects[style.rawValue] = ["playing":VigilChime.shared.isPlaying,"time":VigilChime.shared.playbackTime,"peakDBFS":VigilChime.shared.playbackPower] }
+                else { effects[style.rawValue] = controller.effect == style }
+                voice.stop();wake.stop()
+            }
+            result["nudgeStyles"] = effects
+            // All introduction cards and Help render as native own-window views.
+            let preview = NSPanel(contentRect:CGRect(x:80,y:180,width:600,height:700),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
+            preview.title = "Vigil QA cards"; preview.hidesOnDeactivate = false
+            for page in VigilFeatureIntroduction.cards.indices {
+                preview.contentView = NSHostingView(rootView:VigilFeatureIntroduction(initialPage:page).frame(width:600,height:700))
+                preview.orderFrontRegardless();try? await Task.sleep(nanoseconds:150_000_000);save(preview,"introduction-\(page)")
+            }
+            preview.contentView = NSHostingView(rootView:VigilHelpView().frame(width:600,height:700))
+            try? await Task.sleep(nanoseconds:200_000_000);save(preview,"help");preview.orderOut(nil)
+            // The synthetic item is displayed exactly under the current pointer, without moving it.
+            let mouse = NSEvent.mouseLocation
+            let fixture = NSPanel(contentRect:CGRect(x:mouse.x-180,y:mouse.y-70,width:360,height:140),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
+            fixture.title="Vigil synthetic QA item";fixture.level = .floating;fixture.hidesOnDeactivate=false
+            let field=NSTextField(labelWithString:"A blue folder labelled Meeting notes. This is synthetic test content.")
+            field.frame=CGRect(x:0,y:0,width:360,height:140);field.alignment = .center;field.font = .systemFont(ofSize:18);field.backgroundColor = .windowBackgroundColor;field.drawsBackground = true
+            fixture.contentView=field;fixture.orderFrontRegardless()
+            let previousWake=wake.onWake, previousCommand=wake.onCommand
+            var heardWake=false, heardCommand=false
+            wake.onWake={ heardWake=true;previousWake?();save(controller.bubbleForCheck,"live-listening-bubble") }
+            wake.onCommand={ command in heardCommand=true;previousCommand?(command) }
+            defaults.set(true,forKey:"vigil.voice.wake");defaults.set(true,forKey:"vigil.voice.introduced")
+            controller.answer="";controller.status="";wake.stop();wake.start()
+            try? await Task.sleep(nanoseconds:600_000_000)
+            let say=Process();say.executableURL=URL(fileURLWithPath:"/usr/bin/say");say.arguments=["-v","Daniel","--","Vigil, what is this?"]
+            say.standardOutput=FileHandle.nullDevice;say.standardError=FileHandle.nullDevice
+            do { try say.run() } catch {}
+            var sawPlaying=false, heardPeak:Float=0
+            for _ in 0..<650 {
+                try? await Task.sleep(nanoseconds:100_000_000)
+                heardPeak=max(heardPeak,wake.maximumInputPeak)
+                if voice.isPlaying { sawPlaying=true }
+                if heardCommand && !controller.busy && !voice.speaking { break }
+            }
+            if say.isRunning { say.terminate() }
+            wake.onWake=previousWake;wake.onCommand=previousCommand
+            result["liveWake"] = ["wake":heardWake,"command":heardCommand,"micPeak":heardPeak,"listenerError":wake.lastError,"inputDevice":AVCaptureDevice.default(for:.audio)?.localizedName ?? "unknown"]
+            result["liveAnswer"] = ["context":controller.lastContextKind,"model":controller.lastModel,"answer":controller.answer,"status":controller.status,"speechPlayingObserved":sawPlaying,"sparkleTriggered":Date().timeIntervalSince(controller.answeredAt)<90]
+            save(controller.bubbleForCheck,"live-answer-bubble");save(VigilCharacterHost.shared.panel,"live-answer-face");fixture.orderOut(nil)
+            let support=VigilSupportController.shared, previousTask=VigilSupportController.shared.currentTask
+            support.currentTask="Write a two-line synthetic meeting agenda"
+            controller.ask(.stuck(""))
+            for _ in 0..<650 { try? await Task.sleep(nanoseconds:100_000_000);if !controller.busy && !voice.speaking { break } }
+            result["stuck"]=["answer":controller.answer,"model":controller.lastModel];save(controller.bubbleForCheck,"stuck-answer")
+            support.currentTask=previousTask;voice.stop();wake.stop()
+            if AVCaptureDevice.authorizationStatus(for:.video) == .authorized {
+                controller.ask(.lookAtMe("Describe only the colour and lighting in this requested camera test."))
+                for _ in 0..<750 { try? await Task.sleep(nanoseconds:100_000_000);if !controller.busy && !voice.speaking { break };if controller.recording { save(controller.bubbleForCheck,"camera-recording") } }
+                result["cameraTest"]=["answer":controller.answer,"status":controller.status,"cameraStopped":!controller.recording];save(controller.bubbleForCheck,"camera-answer")
+                voice.stop();wake.stop();support.tryTiredCheck()
+                for _ in 0..<80 { try? await Task.sleep(nanoseconds:100_000_000);if !support.checkingFrame { break } }
+                result["tiredTest"]=support.tiredMessage
+            } else { result["cameraTests"]="Not run: Camera permission requires a human click." }
+            // Preview delivery uses the same announcement path as real due reminders, without editing saved records.
+            for name in ["reminder","meeting","break"] {
+                controller.tryFeature(name);try? await Task.sleep(nanoseconds:300_000_000);save(controller.bubbleForCheck,"try-"+name)
+                result["try-"+name] = ["line":controller.answer,"playback":await waitVoice()];voice.stop();wake.stop()
+            }
+            result["tuckRefreshImported"] = await Task.detached(priority:.utility){ TuckKeychainBridge.refresh() }.value
+            result["brainConnections"] = (await ConnectionTester.run()).map { ["provider":$0.provider,"ok":$0.ok] }
+            controller.refreshVoicePermissions();controller.status="";controller.answer="";controller.updateBubble()
+            save(controller.bubbleForCheck,"permission-card")
+            result["finishedAt"] = ISO8601DateFormatter().string(from:Date())
+            if let data=try? JSONSerialization.data(withJSONObject:result,options:[.prettyPrinted,.sortedKeys]) { try? data.write(to:folder.appendingPathComponent("polish-results.json"),options:.atomic) }
+        }
+    }
     /// Explicit overnight check: no permission request and no model/screen upload.
     static func beginRepairCheck() {
         let args = ProcessInfo.processInfo.arguments
@@ -90,7 +230,10 @@ import ApplicationServices
                 if !voice.speaking { break }
             }
             result["speechPlayback"] = speechSamples; result["speechRenderedPeak"] = voice.renderedPeak
-            result["speechBackend"] = voice.backend; voice.stop(); wake.stop()
+            result["speechBackend"] = voice.backend; result["selectedVoice"] = voice.selectedVoice
+            result["accessibilityPermission"] = AXIsProcessTrusted(); result["screenRecordingPermission"] = CGPreflightScreenCaptureAccess()
+            result["naturalVoices"] = VigilVoiceOutput.voices.map { ["id":$0.identifier,"title":VigilVoiceOutput.voiceTitle($0),"quality":$0.quality.rawValue] }
+            voice.stop(); wake.stop()
             let tests = NSPanel(contentRect: CGRect(x: 80, y: 180, width: 480, height: 700), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             tests.title = "Vigil Settings check"; tests.hidesOnDeactivate = false
             tests.contentView = NSHostingView(rootView: ScrollView { VigilFeatureSettings().padding(20) }.frame(width: 480, height: 700))
@@ -129,7 +272,7 @@ import ApplicationServices
             save(tests, "settings-sound-check"); tests.orderOut(nil); voice.stop(); wake.stop()
             // Local synthetic audio only; no human audio/transcript is retained.
             var recognitionResults: [[String: Any]] = []
-            if !controller.voiceNeedsPermission {
+            if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized && SFSpeechRecognizer.authorizationStatus() == .authorized {
                 for name in ["Vigil", "Virgil"] {
                     let url = folder.appendingPathComponent("synthetic-\(name).aiff")
                     let say = Process(); say.executableURL = URL(fileURLWithPath: "/usr/bin/say")

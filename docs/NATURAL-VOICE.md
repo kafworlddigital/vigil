@@ -40,9 +40,11 @@ The bounded `--vigil-polish-check FOLDER` mode exercises the real installed
 speech paths, visual nudges, synthetic speaker wake, current pointer pipeline,
 camera stop/cleanup, covered-frame handling and Tuck-backed connection checks.
 It preserves settings after checking and uses synthetic screen/task text.
-Native content-view bitmaps can omit SwiftUI text on this OS; such images are
-not accepted as complete Settings/onboarding visual evidence. Actual native
-window screenshots and visible controls must be inspected separately.
+Native content-view bitmaps can have transparent backgrounds. Inspect them on
+white before deciding that black text is missing. All eleven introduction
+cards were inspected this way and fit; the original captures are preserved.
+Actual native Settings screenshots separately confirmed the visible layout,
+natural-only voice choices, Automatic selection and face context menu.
 
 6 November acceptance: 49 portable tests and 13 server tests passed on Contabo.
 Actual authenticated HTTPS neural audio and repeat-cache reuse passed. Injected
@@ -53,3 +55,15 @@ crashed in installed QA and was rejected. Stable signed build 11 was restored;
 no third local build was performed. Live C922 wake acceptance is recorded
 separately in the private delivery receipt, rather than inferred from an engine
 starting or a parser test passing.
+
+The final controlled Mac check subsequently passed the live speaker-to-C922
+wake and command, real pointer Accessibility text, a free NVIDIA answer,
+observed spoken playback, the answer bubble and the sparkle delivery event.
+The speaker test used numeric CoreAudio output selection with `say`; passing
+a display name to `say -a` was not a valid successful acoustic test here.
+Requested-camera inference and the local tired-frame check also passed in that
+final run. Earlier failures remain in the private delivery record. This is a
+synthetic acoustic test, not Keith's own voice acceptance. The screenshot-crop
+fallback and a physical sleep/wake cycle were not independently exercised in
+the final run. Calendar/break timing has portable tests and native previews;
+calendar events and the Mac's sleep state were not changed for QA.

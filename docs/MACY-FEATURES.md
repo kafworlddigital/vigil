@@ -42,3 +42,5 @@ Nothing is installed on Keith's devices. Upload, group assignment and Beta App
 Review are independently read back; TestFlight status is distinct from device use.
 
 US speech uses the Piper LJ Speech high model, trained from scratch on the public-domain LJ Speech dataset. Model card: https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/high/MODEL_CARD . The speech model runs only on the existing server and is not bundled in either app.
+
+Speech waveforms can also use the existing private brain cache (64 clips across voices); request text is not written to logs or process arguments. The app Help distinguishes local recognition from server-generated speech.

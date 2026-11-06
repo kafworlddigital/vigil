@@ -15,12 +15,18 @@ import AVFoundation
     private var hasTap=false
     func begin() async {
         guard !held else{return};held=true;let token=UUID();generation=token;transcript="";message=""
+        #if VIGIL_VOICE_VISION
+        if VigilEdition.macy, AVCaptureDevice.authorizationStatus(for:.audio) != .authorized || SFSpeechRecognizer.authorizationStatus() != .authorized {
+            held=false;message="Choose Allow on the voice card when you’re ready. You can also type."
+            VoiceVisionController.shared.showIntroduction=true;return
+        }
+        #endif
         let status=await withCheckedContinuation{(c:CheckedContinuation<SFSpeechRecognizerAuthorizationStatus,Never>) in SFSpeechRecognizer.requestAuthorization{c.resume(returning:$0)}}
         guard held,generation==token else{message="Hold again when you’re ready to talk.";return}
         let mic=await AVCaptureDevice.requestAccess(for:.audio)
         guard held,generation==token else{message="Hold again when you’re ready to talk.";return}
         guard status == .authorized,mic else{message="Allow microphone and speech access to hold to talk.";held=false;return}
-        guard let recognizer=SFSpeechRecognizer(locale:Locale(identifier:"en-GB")),recognizer.isAvailable,recognizer.supportsOnDeviceRecognition else {
+        guard let recognizer=SFSpeechRecognizer(locale:Locale(identifier:VigilEdition.macy ? "en-US":"en-GB")),recognizer.isAvailable,recognizer.supportsOnDeviceRecognition else {
             message="On-device speech isn't available here yet. You can type your task or idea.";held=false;return
         }
         do {

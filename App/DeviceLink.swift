@@ -192,7 +192,16 @@ final class ScannerController:UIViewController,AVCaptureMetadataOutputObjectsDel
     private let queue=DispatchQueue(label:"com.kafworlddigital.vigil.qr")
     private var stopped=false
     private var preview:AVCaptureVideoPreviewLayer?
-    override func viewDidLoad(){super.viewDidLoad();AVCaptureDevice.requestAccess(for:.video){[weak self] granted in DispatchQueue.main.async{if granted,self?.stopped==false{self?.configure()}}}}
+    override func viewDidLoad(){
+        super.viewDidLoad()
+        if VigilEdition.macy && AVCaptureDevice.authorizationStatus(for:.video) != .authorized {
+            let label=UILabel();label.text="Pair with your Mac\n\nAllow your camera once to scan its private code. The camera turns off when you finish.";label.numberOfLines=0;label.textAlignment = .center
+            let button=UIButton(type:.system);button.setTitle("Allow Camera",for:.normal);button.addTarget(self,action:#selector(allowPairCamera),for:.touchUpInside)
+            let card=UIStackView(arrangedSubviews:[label,button]);card.axis = .vertical;card.spacing=18;card.translatesAutoresizingMaskIntoConstraints=false;view.addSubview(card)
+            NSLayoutConstraint.activate([card.centerXAnchor.constraint(equalTo:view.centerXAnchor),card.centerYAnchor.constraint(equalTo:view.centerYAnchor),card.widthAnchor.constraint(lessThanOrEqualTo:view.widthAnchor,constant:-32)])
+        } else {allowPairCamera()}
+    }
+    @objc private func allowPairCamera(){AVCaptureDevice.requestAccess(for:.video){[weak self] granted in DispatchQueue.main.async{if granted,self?.stopped==false{self?.view.subviews.forEach{$0.removeFromSuperview()};self?.configure()}}}}
     private func configure(){
         guard let camera=AVCaptureDevice.default(for:.video),let input=try? AVCaptureDeviceInput(device:camera),session.canAddInput(input) else{return}
         session.addInput(input);let output=AVCaptureMetadataOutput();guard session.canAddOutput(output) else{return}

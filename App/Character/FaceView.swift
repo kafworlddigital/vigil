@@ -21,7 +21,14 @@ private struct Spring {
 }
 
 /// Smooths what the Mac asks for into lifelike motion: darting eyes, brows, blinks, leaning, hops.
-final class FaceAnimator {
+final class FaceAnimator: ObservableObject {
+    #if os(macOS)
+    @Published var animationPaused = true
+    #else
+    @Published var animationPaused = false
+    #endif
+    var persistentTarget = false
+    private(set) var renderedFrames = 0
     struct Frame {
         var gaze: CGPoint
         var mood: Mood
@@ -77,10 +84,11 @@ final class FaceAnimator {
     }
 
     func step(_ now: Double) -> Frame {
+        renderedFrames += 1
         let dt = min(now - (lastTime ?? now), 1.0 / 20)
         lastTime = now
 
-        let live = now - lastPacket < 2.5
+        let live = persistentTarget || now - lastPacket < 2.5
         let wantedMood = localMood ?? (live ? target.mood : .listening)
         if wantedMood != mood {
             mood = wantedMood
@@ -175,18 +183,24 @@ final class FaceAnimator {
 
 /// The landscape face on pure black: he fills the screen and peeks up from the bottom edge.
 struct FaceView: View {
-    let animator: FaceAnimator
+    @ObservedObject var animator: FaceAnimator
     var transparent = false
+    @State private var viewVisible = true
     #if VIGIL_VOICE_VISION
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var features = VoiceVisionController.shared
     #endif
 
+    init(animator: FaceAnimator, transparent: Bool = false) {
+        _animator = ObservedObject(wrappedValue: animator)
+        self.transparent = transparent
+    }
+
     // The design is drawn on an 844 × 390 landscape phone.
     static let design = CGSize(width: 844, height: 390)
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: animator.animationPaused || !viewVisible)) { timeline in
             Canvas { ctx, size in
                 var frame = animator.step(timeline.date.timeIntervalSinceReferenceDate)
                 var glow: Double = 0
@@ -207,12 +221,14 @@ struct FaceView: View {
                 #endif
                 FaceView.draw(frame, in: &ctx, size: size, transparent: transparent, glow: glow)
             }
+            #if VIGIL_VOICE_VISION
+            .modifier(VigilFaceEffects(date: timeline.date))
+            #endif
         }
         .background(transparent ? Color.clear : Color.black)
         .ignoresSafeArea()
-        #if VIGIL_VOICE_VISION
-        .modifier(VigilFaceEffects())
-        #endif
+        .onAppear { viewVisible = true }
+        .onDisappear { viewVisible = false }
     }
 
     /// Fills a shape with his skin (gradient plus the same soft shine), for eyelids.

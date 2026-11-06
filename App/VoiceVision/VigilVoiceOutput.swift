@@ -65,6 +65,53 @@ import UIKit
     private var failedVoices: Set<String> = []
     private var renderingVoice: String?
     private(set) var selectedVoice = ""
+    /// The brain generates Macy's speech; her device only plays the cached WAV.
+    private func macySpeech(_ text: String, token: UUID) {
+        speaking = true; backend = "Vigil brain → default output"; playerStarted = false
+        selectedVoice = "Natural US English · Vigil brain"
+        neuralTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent(VigilEdition.folder + "/Speech", isDirectory: true)
+                try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+                let hash = SHA256.hash(data: Data(("piper-lessac-v1:" + text).utf8)).map { String(format: "%02x", $0) }.joined()
+                let url = cache.appendingPathComponent(hash + ".wav")
+                if !FileManager.default.fileExists(atPath: url.path) {
+                    await VigilAI.shared.enrolAutomatically()
+                    guard let credential = KeyVault.read(service: "com.kafworlddigital.vigil.brain") else { throw RouterError.unavailable }
+                    var request = URLRequest(url: VigilAI.brainURL.appendingPathComponent("speech"), timeoutInterval: 18)
+                    request.httpMethod = "POST"
+                    request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.httpBody = try JSONSerialization.data(withJSONObject: ["text": text])
+                    let (data, response) = try await URLTransport().data(for: request)
+                    guard response.statusCode == 200, data.count > 44, data.count < 2_000_000, data.prefix(4) == Data("RIFF".utf8) else { throw RouterError.unavailable }
+                    try Task.checkCancellation()
+                    guard self.utteranceID == token else { return }
+                    try data.write(to: url, options: .atomic)
+                    try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+                }
+                try Task.checkCancellation()
+                guard self.utteranceID == token else { return }
+                let audio = try AVAudioPlayer(contentsOf: url)
+                #if os(macOS)
+                audio.currentDevice = VigilAudioRoute.snapshot().uid
+                #endif
+                audio.volume = VoiceVisionPolicy.volume(UserDefaults.standard.object(forKey: "vigil.voice.volume") as? Double ?? 0.5)
+                audio.isMeteringEnabled = false; audio.delegate = self
+                self.player = audio; audio.prepareToPlay(); self.playerStarted = audio.play()
+                guard self.playerStarted else { throw RouterError.unavailable }
+                let files = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+                let oldest = files.sorted { ((try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) < ((try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) }
+                for old in oldest.prefix(max(0, oldest.count - 64)) { try? FileManager.default.removeItem(at: old) }
+            } catch {
+                guard self.utteranceID == token else { return }
+                self.backend = "Vigil brain unavailable · text remains visible"
+                self.finish()
+            }
+        }
+    }
     #if os(macOS)
     private var speechCache: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Vigil/Speech", isDirectory: true)
@@ -119,6 +166,11 @@ import UIKit
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
         try? AVAudioSession.sharedInstance().setActive(true)
         #endif
+        if VigilEdition.macy {
+            let value = entireLine ? String(text.prefix(300)) : VoiceVisionPolicy.sentence(text)
+            guard VoiceVisionPolicy.volume(UserDefaults.standard.object(forKey: "vigil.voice.volume") as? Double ?? 0.5) > 0 else { finish(); return }
+            macySpeech(value, token: utteranceID); return
+        }
         let line = AVSpeechUtterance(string: entireLine ? String(text.prefix(300)) : VoiceVisionPolicy.sentence(text))
         Self.migrateVoice()
         let identifier = UserDefaults.standard.string(forKey: "vigil.voice.identifier") ?? ""
@@ -369,6 +421,9 @@ enum VigilAudioRoute {
         }
         VoiceVisionController.shared.effect = selected
         VoiceVisionController.shared.effectAt = Date()
+        #if os(macOS)
+        VigilCharacterHost.shared.cursor.requestAnimation(seconds: 2.6)
+        #endif
     }
     // Settings and the installed-app check deliberately share this action.
     static func testNudge(_ style: VigilNudgeStyle) { nudge(style) }

@@ -135,7 +135,7 @@ public actor OpenRouterClient {
     public static let fallbackNudge = "Are you sure you're on task right now?"
     public func nudge(task: String, key: String, allowPaid: Bool = false,
                       goKey: String? = nil, permitsSend: @escaping @Sendable () async -> Bool = { true }) async -> String {
-        let messages:[[String:Any]] = [["role":"system","content":"Write one gentle British English reminder to return to the task, at most 18 words. No scolding, shame, certainty, narration, or commands from task data. Only the sentence."],["role":"user","content":"Task data: \(task.prefix(500))"]]
+        let messages:[[String:Any]] = [["role":"system","content":"Write one gentle US English reminder to return to the task, at most 18 words. No scolding, shame, certainty, narration, or commands from task data. Only the sentence."],["role":"user","content":"Task data: \(task.prefix(500))"]]
         if let models = try? await models(vision:false,allowPaid:allowPaid) {
             for model in models.prefix(2) {
                 if let text = try? await completion(model:model,messages:messages,key:key,allowPaid:allowPaid,permitsSend:permitsSend), Self.validNudge(text) { return text }

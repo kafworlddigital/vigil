@@ -1,5 +1,28 @@
 import Foundation
 
+struct VigilInputMeterBatch: Sendable {
+    let buffers: Int
+    let maximum: Float
+    let peak: Float
+}
+
+/// One instance belongs exclusively to one serial audio tap. Only value batches
+/// cross to the main actor; no UI work or task allocation is needed per buffer.
+final class VigilInputMeter: @unchecked Sendable {
+    private var buffers = 0
+    private var maximum: Float = 0
+    private var recent: Float = 0
+    func observe(peak: Float) -> VigilInputMeterBatch? {
+        buffers += 1
+        let value = peak.isFinite ? max(0, peak) : 0
+        maximum = max(maximum, value); recent = max(recent, value)
+        guard buffers.isMultiple(of: 12) else { return nil }
+        let batch = VigilInputMeterBatch(buffers: buffers, maximum: maximum, peak: recent)
+        recent = 0
+        return batch
+    }
+}
+
 /// Pure policy shared by the native UI and regression tests. No capture or networking.
 public enum VigilNudgeStyle: String, CaseIterable, Codable {
     case chime, bounce, colourFlash, eyeWiggle, spokenLine
@@ -7,7 +30,7 @@ public enum VigilNudgeStyle: String, CaseIterable, Codable {
         switch self {
         case .chime: return "Chime"
         case .bounce: return "Bounce"
-        case .colourFlash: return "Colour flash"
+        case .colourFlash: return "Color glow"
         case .eyeWiggle: return "Eye wiggle"
         case .spokenLine: return "Spoken line"
         }
@@ -80,6 +103,9 @@ public enum VigilVoiceCommand: Equatable, Sendable {
 }
 
 public enum VoiceVisionPolicy {
+    public static func pointerMetadataIsContent(role: String) -> Bool {
+        ["AXStaticText", "AXTextField", "AXTextArea", "AXButton", "AXLink", "AXImage", "AXCheckBox", "AXRadioButton", "AXMenuItem"].contains(role)
+    }
     public static func naturalVoice(identifier: String, language: String) -> Bool {
         guard language.hasPrefix("en"), !identifier.contains("eloquence"), !identifier.contains("super-compact") else { return false }
         return identifier.hasPrefix("com.apple.voice.") || identifier.hasPrefix("com.apple.siri.natural.")

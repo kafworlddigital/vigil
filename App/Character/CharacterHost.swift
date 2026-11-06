@@ -2,6 +2,7 @@
 import AppKit
 import SwiftUI
 import QuartzCore
+import Combine
 
 enum Fonts { static func display(_ size:CGFloat)->NSFont { NSFont(name:"Fredoka",size:size) ?? NSFont.systemFont(ofSize:size,weight:.semibold) } }
 
@@ -28,6 +29,7 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         VigilFeatureProof.beginNudgeCheck()
         VigilFeatureProof.beginRepairCheck()
         VigilFeatureProof.beginPolishCheck()
+        VigilFeatureProof.beginAcceptanceCheck()
         #endif
         let args=ProcessInfo.processInfo.arguments
         if let i=args.firstIndex(of:"--vigil-test-connections"),i+1<args.count {
@@ -44,7 +46,9 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
     let animator=FaceAnimator()
     let cursor=CursorOverlay()
     var panel:NSPanel?
-    private var poll:Timer?
+    private var systemSleeping = false
+    private var focused = false
+    private var connections: AnyCancellable?
     private var dragAnchor:NSPoint?
     private var origin:NSPoint?
     private var dragging=false
@@ -56,6 +60,9 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
     private(set) var sampledMouse=CGPoint.zero
     private(set) var sampledFace=FaceState()
     var visible:Bool { UserDefaults.standard.object(forKey:"vigil.face.visible") as? Bool ?? true }
+    private var renderingVisible: Bool {
+        visible && !systemSleeping && !NSApp.isHidden && panel?.isVisible == true
+    }
     func start(server:MacDeviceServer) {
         self.server=server
         guard !started else{return};started=true
@@ -78,14 +85,18 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         p.contentView=NSHostingView(rootView:FaceView(animator:animator,transparent:true))
         #endif
         panel=p;resize();setVisible(visible)
+        animator.persistentTarget = true
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemSleep), name: NSWorkspace.willSleepNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(systemWake), name: NSWorkspace.didWakeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(displaysChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshVisibility), name: NSApplication.didHideNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshVisibility), name: NSApplication.didUnhideNotification, object: nil)
         cursor.onFace={ [weak self] frame in
             guard let self else{return}
             // Keep upstream's phone gaze: it sits BELOW the monitor and looks up at the mouse/buddy.
             // The added desktop face looks from its own eyes towards the cursor on any display.
             var face=frame
+            if self.focused && self.cursor.view.engine.brainMood == nil { face.mood = .resting }
             #if VIGIL_VOICE_VISION
             let controller = VoiceVisionController.shared
             if VigilVoiceOutput.shared.speaking { face.mood = .talking }
@@ -102,25 +113,49 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
                 face.gazeX=dx/reach;face.gazeY=dy/reach
             }
             if let fixture=self.rendererFixtureGaze {face.gazeX=fixture.x;face.gazeY=fixture.y}
+            let changedMood = self.sampledFace.mood != face.mood
             self.sampledFace=face
+            if changedMood { self.cursor.requestAnimation() }
             self.animator.receive(face,at:Date.timeIntervalSinceReferenceDate)
+            let paused = !self.renderingVisible || !self.cursor.isAnimating
+            if self.animator.animationPaused != paused { self.animator.animationPaused = paused }
             let now=CACurrentMediaTime()
             if now-self.lastBroadcast>=1.0/30 {self.lastBroadcast=now;self.server?.broadcast(Packet(face:frame))}
         }
+        cursor.onSample = { [weak self] in self?.trackDrag() }
+        cursor.pointerAnimationAllowed = { [weak self] in
+            guard let self else { return false }
+            return !self.focused || self.dragging || self.cursor.view.engine.brainMood != nil
+        }
+        cursor.hasCompanions = { [weak server] in !(server?.phones.isEmpty ?? true) }
+        connections = server.$phones.dropFirst().sink { [weak self] _ in
+            Task { @MainActor in self?.cursor.requestAnimation() }
+        }
+        #if VIGIL_VOICE_VISION
+        cursor.needsAnimation = {
+            let controller = VoiceVisionController.shared
+            return controller.busy || controller.status == "Listening…" || VigilVoiceOutput.shared.speaking
+        }
+        #endif
         cursor.start()
         VigilProof.begin(host:self)
-        poll=Timer.scheduledTimer(withTimeInterval:1.0/30,repeats:true){[weak self] _ in Task{@MainActor in self?.trackDrag()}}
     }
     @objc private func displaysChanged() { resize() }
+    @objc private func refreshVisibility() {
+        let show = renderingVisible
+        if animator.animationPaused != !show { animator.animationPaused = !show }
+        if !show { dragging = false; dragAnchor = nil; origin = nil }
+        cursor.setFaceVisible(show)
+    }
     @objc private func systemSleep() {
-        poll?.invalidate(); poll=nil; panel?.orderOut(nil); cursor.setSleeping(true)
+        systemSleeping = true; animator.animationPaused = true; panel?.orderOut(nil); cursor.setSleeping(true)
         #if VIGIL_VOICE_VISION
         VoiceVisionController.shared.systemSleep()
         #endif
     }
     @objc private func systemWake() {
+        systemSleeping = false
         resize(); setVisible(visible); cursor.setSleeping(false)
-        if poll == nil { poll=Timer.scheduledTimer(withTimeInterval:1.0/30,repeats:true){[weak self] _ in Task{@MainActor in self?.trackDrag()}} }
         #if VIGIL_VOICE_VISION
         VoiceVisionController.shared.systemWake()
         #endif
@@ -143,10 +178,15 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
         UserDefaults.standard.removeObject(forKey:"vigil.face.y")
         resize()
     }
-    func setVisible(_ show:Bool){UserDefaults.standard.set(show,forKey:"vigil.face.visible");if show{panel?.orderFrontRegardless()}else{panel?.orderOut(nil)}}
+    func setVisible(_ show:Bool){
+        UserDefaults.standard.set(show,forKey:"vigil.face.visible")
+        if show && !systemSleeping { panel?.orderFrontRegardless() } else { panel?.orderOut(nil) }
+        refreshVisibility()
+        if show { DispatchQueue.main.async { [weak self] in self?.refreshVisibility() } }
+    }
     func showMoveHint(){cursor.view.caption="Click my face to listen. Hold Option and drag to move me.";DispatchQueue.main.asyncAfter(deadline:.now()+7){[weak self] in self?.cursor.view.caption=nil}}
     private func trackDrag(){
-        guard let p=panel,visible else{return}
+        guard let p=panel,renderingVisible else{return}
         let m=NSEvent.mouseLocation
         let option=NSEvent.modifierFlags.contains(.option)
         let pressed=NSEvent.pressedMouseButtons & 1 != 0
@@ -157,13 +197,21 @@ final class VigilDelegate:NSObject,NSApplicationDelegate {
             dragging=false;UserDefaults.standard.set(p.frame.origin.x,forKey:"vigil.face.x");UserDefaults.standard.set(p.frame.origin.y,forKey:"vigil.face.y")
         }
         #if VIGIL_VOICE_VISION
-        p.ignoresMouseEvents = !(dragging || p.frame.contains(m))
+        let ignore = !(dragging || p.frame.contains(m))
+        if p.ignoresMouseEvents != ignore { p.ignoresMouseEvents = ignore }
         #else
-        p.ignoresMouseEvents = !(option && (dragging || p.frame.contains(m)))
+        let ignore = !(option && (dragging || p.frame.contains(m)))
+        if p.ignoresMouseEvents != ignore { p.ignoresMouseEvents = ignore }
         #endif
     }
-    func setMood(_ mood:Mood){Settings.shared.mood=mood;cursor.view.engine.brainMood=mood}
-    func releaseMood(){cursor.view.engine.brainMood=nil;Settings.shared.mood = .listening}
+    func setMood(_ mood:Mood){Settings.shared.mood=mood;cursor.view.engine.brainMood=mood;cursor.requestAnimation()}
+    func releaseMood(){cursor.view.engine.brainMood=nil;Settings.shared.mood = .listening;cursor.requestAnimation()}
+    /// Confirmed task evidence lets Vigil rest; uncertainty never pretends to be focus.
+    func setFocusActivity(_ activity: FocusActivity?) {
+        focused = activity == .onTask
+        cursor.view.engine.awake = activity == .offTask
+        cursor.requestAnimation()
+    }
     func nudge(_ text:String,target:CGPoint?=nil){
         #if VIGIL_VOICE_VISION
         if CompanionPreferences().nudge != .quiet {VigilFeedback.nudge()}

@@ -8,7 +8,7 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     MARKETING_VERSION: '1.0'
-    CURRENT_PROJECT_VERSION: '11'
+    CURRENT_PROJECT_VERSION: '14'
     DEVELOPMENT_TEAM: V892V3PC6T
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: true
@@ -97,9 +97,7 @@ targets:
     type: application
     platform: iOS
     sources:
-    - path: App
-      excludes:
-      - VoiceVision
+    - App
     - Core
     - path: Shared
       excludes:
@@ -110,14 +108,16 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kafworlddigital.vigil.m.ios
-        PRODUCT_NAME: Vigil
+        PRODUCT_NAME: Vigil for Macy
+        CODE_SIGN_ENTITLEMENTS: Config/VigilMacy.entitlements
         TARGETED_DEVICE_FAMILY: 1,2
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: true
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) VIGIL_VOICE_VISION VIGIL_MACY
     info:
       path: Config/VigilMacy-Info.plist
       properties:
-        CFBundleDisplayName: Vigil
+        CFBundleDisplayName: Vigil for Macy
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
@@ -126,10 +126,9 @@ targets:
         NSLocalNetworkUsageDescription: Vigil pairs securely with your Mac on the same Wi-Fi.
         NSBonjourServices:
         - _vigil-m._tcp
-        NSCameraUsageDescription: Scan your Mac's private Vigil pairing code.
-        NSMicrophoneUsageDescription: Hold to talk to start a focus session or park an idea.
-        NSSpeechRecognitionUsageDescription: Vigil recognises your words on this device, without uploading
-          audio.
+        NSCameraUsageDescription: Only when you choose, record a four-second question clip, check one unsaved tired-check frame, or scan your Mac pairing code.
+        NSMicrophoneUsageDescription: With your permission, Vigil hears Vigil or Virgil on this device and records only the four-second camera clip you request.
+        NSSpeechRecognitionUsageDescription: Vigil recognizes your words on this device. Speech recordings are never uploaded.
         NSCalendarsFullAccessUsageDescription: Choose today's calendar events as focus tasks. Vigil never
           changes your calendar.
         VigilEdition: macy
@@ -137,32 +136,33 @@ targets:
     type: application
     platform: macOS
     sources:
-    - path: App
-      excludes:
-      - VoiceVision
+    - App
     - Core
     - path: Shared
       excludes:
       - Fonts
       - VoiceTurnBuffer.swift
+    - Resources/VigilChime.wav
     - Resources/AppIcon.icns
     - Resources/model-candidates.json
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kafworlddigital.vigil.m.mac
-        PRODUCT_NAME: Vigil
+        PRODUCT_NAME: Vigil for Macy
         GENERATE_INFOPLIST_FILE: true
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) VIGIL_VOICE_VISION VIGIL_MACY
         ENABLE_HARDENED_RUNTIME: true
         CODE_SIGN_ENTITLEMENTS: Config/VigilMacyMac.entitlements
     info:
       path: Config/VigilMacyMac-Info.plist
       properties:
-        CFBundleDisplayName: Vigil
+        CFBundleDisplayName: Vigil for Macy
         CFBundleIconFile: AppIcon.icns
         LSUIElement: false
         NSPrincipalClass: NSApplication
-        NSMicrophoneUsageDescription: Hold to talk to start a focus session or park an idea.
-        NSSpeechRecognitionUsageDescription: Vigil recognises speech on this Mac without uploading audio.
+        NSCameraUsageDescription: Only when you choose, record a four-second question clip or check one unsaved tired-check frame.
+        NSMicrophoneUsageDescription: With your permission, Vigil hears Vigil or Virgil on this device and records only the four-second camera clip you request.
+        NSSpeechRecognitionUsageDescription: Vigil recognizes your words on this device. Speech recordings are never uploaded.
         NSCalendarsFullAccessUsageDescription: Read meeting titles locally and give a five-minute meeting
           warning. Vigil never changes your calendar.
         NSLocalNetworkUsageDescription: Vigil pairs with your iPhone and iPad on the same Wi-Fi.

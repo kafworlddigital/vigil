@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>en_US</string>
 	<key>CFBundleDisplayName</key>
-	<string>Vigil</string>
+	<string>Vigil for Macy</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -19,7 +19,9 @@
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_vigil-m._tcp</string>
@@ -27,13 +29,13 @@
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Choose today's calendar events as focus tasks. Vigil never changes your calendar.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Scan your Mac's private Vigil pairing code.</string>
+	<string>Only when you choose, record a four-second question clip, check one unsaved tired-check frame, or scan your Mac pairing code.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Vigil pairs securely with your Mac on the same Wi-Fi.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Hold to talk to start a focus session or park an idea.</string>
+	<string>With your permission, Vigil hears Vigil or Virgil on this device and records only the four-second camera clip you request.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Vigil recognises your words on this device, without uploading audio.</string>
+	<string>Vigil recognizes your words on this device. Speech recordings are never uploaded.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

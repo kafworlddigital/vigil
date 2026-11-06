@@ -4,6 +4,7 @@ import ApplicationServices
 import ScreenCaptureKit
 
 struct VigilPointerContext {
+    @MainActor static var onCaptureForCheck: ((Data) throws -> Void)?
     var text: String
     var image: Data?
     var application: String
@@ -13,12 +14,14 @@ struct VigilPointerContext {
         guard AXIsProcessTrusted() else { throw ContextFailure.accessibility }
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1)
         let point = CGEvent(source: nil)?.location ?? .zero
+        var pointerApplication = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Screen"
         var hovered: AXUIElement?
         let status = AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &hovered)
         if status == .success, let hovered {
             var pid: pid_t = 0; AXUIElementGetPid(hovered, &pid)
             let app = NSRunningApplication(processIdentifier: pid)
             let name = app?.localizedName ?? "Unknown app"
+            pointerApplication = name
             guard !["tuck", "1password", "keychain", "passwords"].contains(where: name.lowercased().contains) else { throw RouterError.privateScreen }
             func string(_ key: CFString) -> String? {
                 var value: CFTypeRef?
@@ -26,7 +29,11 @@ struct VigilPointerContext {
                 return value as? String
             }
             guard string(kAXSubroleAttribute as CFString) != kAXSecureTextFieldSubrole as String else { throw RouterError.privateScreen }
-            let text = [kAXSelectedTextAttribute, kAXValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute]
+            // A window/container title describes the app, not the image under the pointer.
+            let role = string(kAXRoleAttribute as CFString) ?? ""
+            let keys = [kAXSelectedTextAttribute, kAXValueAttribute] +
+                (VoiceVisionPolicy.pointerMetadataIsContent(role: role) ? [kAXTitleAttribute, kAXDescriptionAttribute] : [])
+            let text = keys
                 .compactMap { string($0 as CFString) }.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                 .joined(separator: "\n")
             if !text.isEmpty { return Self(text: String(text.prefix(2500)), application: name) }
@@ -49,7 +56,8 @@ struct VigilPointerContext {
         let latest = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         try WorkScreenGuard.shareable(latest)
         guard let jpeg = NSBitmapImageRep(cgImage: image).representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else { throw RouterError.unavailable }
-        return Self(text: "Small crop around the pointer", image: jpeg, application: NSWorkspace.shared.frontmostApplication?.localizedName ?? "Screen")
+        if ProcessInfo.processInfo.arguments.contains("--vigil-acceptance-check") { try onCaptureForCheck?(jpeg) }
+        return Self(text: "Small crop around the pointer", image: jpeg, application: pointerApplication)
     }
     @MainActor static func check() throws {
         try WorkScreenGuard.check()

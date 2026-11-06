@@ -7,6 +7,25 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		84622E53091972E358CC3C3A /* VigilTiredFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3FA74E0A0414148FA88AA2 /* VigilTiredFrame.swift */; };
+		E800EAA8DC2FFC2C908887EE /* VoiceVisionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6381D5162D8816E19455C06C /* VoiceVisionController.swift */; };
+		E518C389D01EE2DA109B0881 /* VigilWakeListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AFE710CBB7618CC86178308 /* VigilWakeListener.swift */; };
+		E17E3491BB34353FC96B75E7 /* VigilPointerContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 606CEF0596C2A13AFA1DC3A3 /* VigilPointerContext.swift */; };
+		D64B727D9740FDA5F339B6C3 /* VigilCameraCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7FA644A3A875A093600804 /* VigilCameraCapture.swift */; };
+		031714285B293C61E36ECC49 /* VigilVoiceOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDB143823F6B45C90A22F02 /* VigilVoiceOutput.swift */; };
+		D4959F50930C8F8FB6E82D6A /* VigilFeatureProof.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5239D0E4E2C2D673775432DC /* VigilFeatureProof.swift */; };
+		BF01865F9FD65375A5ADC7A8 /* VigilFeatureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F84A7B718B5FE27BDF2CFD2 /* VigilFeatureViews.swift */; };
+		6B37F5A42A170CF6C901193D /* VigilSupportController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5EFE86EECA189920DAAB2DB /* VigilSupportController.swift */; };
+		43E706533C5D17611F9B00FA /* VigilTiredFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3FA74E0A0414148FA88AA2 /* VigilTiredFrame.swift */; };
+		5189B6E096A956E6E523A089 /* VoiceVisionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6381D5162D8816E19455C06C /* VoiceVisionController.swift */; };
+		30C9D8EEDFBA4350F245EFC6 /* VigilWakeListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AFE710CBB7618CC86178308 /* VigilWakeListener.swift */; };
+		8A5EEFF2722ECC5F7E3136B2 /* VigilPointerContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 606CEF0596C2A13AFA1DC3A3 /* VigilPointerContext.swift */; };
+		734AF1FADECC9F433E4FF95E /* VigilCameraCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC7FA644A3A875A093600804 /* VigilCameraCapture.swift */; };
+		7FA52F7E48D77631DD13775F /* VigilVoiceOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FDB143823F6B45C90A22F02 /* VigilVoiceOutput.swift */; };
+		3F977D479A17696EF02ADE33 /* VigilFeatureProof.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5239D0E4E2C2D673775432DC /* VigilFeatureProof.swift */; };
+		71CBC5209026732A5B6D05E4 /* VigilFeatureViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F84A7B718B5FE27BDF2CFD2 /* VigilFeatureViews.swift */; };
+		9CD8CDA2AA9D538B8BCFD999 /* VigilSupportController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5EFE86EECA189920DAAB2DB /* VigilSupportController.swift */; };
+		5332550F95B40453EB896D69 /* VigilChime.wav in Resources */ = {isa = PBXBuildFile; fileRef = E155A1A1A1A1A1A1A1A1A101 /* VigilChime.wav */; };
 		E155A1A1A1A1A1A1A1A1A102 /* VigilChime.wav in Resources */ = {isa = PBXBuildFile; fileRef = E155A1A1A1A1A1A1A1A1A101 /* VigilChime.wav */; };
 		0078EB9BD172B8A524760730 /* GooglyLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FA3991894542E2641E8FCE /* GooglyLink.swift */; };
 		047EF0390431EA28A4283B1B /* VigilChirp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71F2B93B38CF81CFDD900401 /* VigilChirp.swift */; };
@@ -186,7 +205,7 @@
 		27B4D107197D13DABE10C7CF /* model-candidates.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "model-candidates.json"; sourceTree = "<group>"; };
 		2D139D7AB943026A8F005DFF /* SupportPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportPolicy.swift; sourceTree = "<group>"; };
 		3478347CE1035FBFD2D8BCBB /* ConnectionStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStatus.swift; sourceTree = "<group>"; };
-		36B7A777B394000E1EDC4248 /* VigilMacyMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VigilMacyMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		36B7A777B394000E1EDC4248 /* VigilMacyMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Vigil for Macy.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		37A4D9351632D76A01F6E7DE /* VigilIntroCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VigilIntroCapture.swift; sourceTree = "<group>"; };
 		382045F99AAA2E86DE798EE9 /* VoiceVisionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceVisionPolicy.swift; sourceTree = "<group>"; };
 		3B463A7302ED1097F2BDEC80 /* MacFocusEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacFocusEngine.swift; sourceTree = "<group>"; };
@@ -214,7 +233,7 @@
 		9AFE710CBB7618CC86178308 /* VigilWakeListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VigilWakeListener.swift; sourceTree = "<group>"; };
 		A5EFE86EECA189920DAAB2DB /* VigilSupportController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VigilSupportController.swift; sourceTree = "<group>"; };
 		A992B1C77CB944F6C9751D1F /* PhoneFaceScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneFaceScreen.swift; sourceTree = "<group>"; };
-		B658F35FB9855E8A20429BEA /* VigilMacy.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VigilMacy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B658F35FB9855E8A20429BEA /* VigilMacy.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Vigil for Macy.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B85D36572956AF65600CE196 /* Vigil.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Vigil.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BA485EF951538A9E8C0E1EDD /* TuckKeychainBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TuckKeychainBridge.swift; sourceTree = "<group>"; };
 		BB0FD8B869EBD94FD0499062 /* VigilHelp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VigilHelp.swift; sourceTree = "<group>"; };
@@ -503,6 +522,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5332550F95B40453EB896D69 /* VigilChime.wav in Resources */,
 				FD845F4465157141E3483A8C /* AppIcon.icns in Resources */,
 				3AD73EC0D8D9C464AB787AD1 /* model-candidates.json in Resources */,
 			);
@@ -515,6 +535,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				43E706533C5D17611F9B00FA /* VigilTiredFrame.swift in Sources */,
+				5189B6E096A956E6E523A089 /* VoiceVisionController.swift in Sources */,
+				30C9D8EEDFBA4350F245EFC6 /* VigilWakeListener.swift in Sources */,
+				8A5EEFF2722ECC5F7E3136B2 /* VigilPointerContext.swift in Sources */,
+				734AF1FADECC9F433E4FF95E /* VigilCameraCapture.swift in Sources */,
+				7FA52F7E48D77631DD13775F /* VigilVoiceOutput.swift in Sources */,
+				3F977D479A17696EF02ADE33 /* VigilFeatureProof.swift in Sources */,
+				71CBC5209026732A5B6D05E4 /* VigilFeatureViews.swift in Sources */,
+				9CD8CDA2AA9D538B8BCFD999 /* VigilSupportController.swift in Sources */,
 				A6B1A399A83B6D278DD8F3AF /* BlobShape.swift in Sources */,
 				22BCAB24CB58F720600781A9 /* CalendarReader.swift in Sources */,
 				6CBF9B1F96E2B7858EE6F4B8 /* CharacterHost.swift in Sources */,
@@ -659,6 +688,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				84622E53091972E358CC3C3A /* VigilTiredFrame.swift in Sources */,
+				E800EAA8DC2FFC2C908887EE /* VoiceVisionController.swift in Sources */,
+				E518C389D01EE2DA109B0881 /* VigilWakeListener.swift in Sources */,
+				E17E3491BB34353FC96B75E7 /* VigilPointerContext.swift in Sources */,
+				D64B727D9740FDA5F339B6C3 /* VigilCameraCapture.swift in Sources */,
+				031714285B293C61E36ECC49 /* VigilVoiceOutput.swift in Sources */,
+				D4959F50930C8F8FB6E82D6A /* VigilFeatureProof.swift in Sources */,
+				BF01865F9FD65375A5ADC7A8 /* VigilFeatureViews.swift in Sources */,
+				6B37F5A42A170CF6C901193D /* VigilSupportController.swift in Sources */,
 				A22C0D1720B2D3BDC634A60A /* BlobShape.swift in Sources */,
 				1C78DE8DEF047D95A04CE0C0 /* CalendarReader.swift in Sources */,
 				941BA5F7F066FEC54E0ED60B /* CharacterHost.swift in Sources */,
@@ -703,6 +741,9 @@
 		18AA9BD32198A7D1521DF5F5 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/VigilMacy.entitlements;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VIGIL_VOICE_VISION VIGIL_MACY";
+				CURRENT_PROJECT_VERSION = 14;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -712,7 +753,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kafworlddigital.vigil.m.ios;
-				PRODUCT_NAME = Vigil;
+				PRODUCT_NAME = "Vigil for Macy";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -753,7 +794,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 14;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = V892V3PC6T;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -809,6 +850,8 @@
 		57CF515032CD826606DCB6BC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VIGIL_VOICE_VISION VIGIL_MACY";
+				CURRENT_PROJECT_VERSION = 14;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Config/VigilMacyMac.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -820,7 +863,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kafworlddigital.vigil.m.mac;
-				PRODUCT_NAME = Vigil;
+				PRODUCT_NAME = "Vigil for Macy";
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -900,7 +943,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 14;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = V892V3PC6T;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -929,6 +972,8 @@
 		778DD1F121A7ED1544F57EF0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VIGIL_VOICE_VISION VIGIL_MACY";
+				CURRENT_PROJECT_VERSION = 14;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Config/VigilMacyMac.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -940,7 +985,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kafworlddigital.vigil.m.mac;
-				PRODUCT_NAME = Vigil;
+				PRODUCT_NAME = "Vigil for Macy";
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -968,6 +1013,9 @@
 		E8578D47C7D899336B66A9EF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/VigilMacy.entitlements;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VIGIL_VOICE_VISION VIGIL_MACY";
+				CURRENT_PROJECT_VERSION = 14;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -977,7 +1025,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.kafworlddigital.vigil.m.ios;
-				PRODUCT_NAME = Vigil;
+				PRODUCT_NAME = "Vigil for Macy";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

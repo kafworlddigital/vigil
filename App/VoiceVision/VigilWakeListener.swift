@@ -23,6 +23,7 @@ import AVFoundation
     private var lastCommand: VigilVoiceCommand?
     private(set) var wakeCount = 0
     @Published private(set) var inputPeak: Float = 0
+    var meteringRequested = false
     private(set) var inputBuffers = 0
     private(set) var maximumInputPeak: Float = 0
     private(set) var localeIdentifier = ""
@@ -30,7 +31,7 @@ import AVFoundation
     private var routeObserver: NSObjectProtocol?
 
     static var availableRecognizer: SFSpeechRecognizer? {
-        ["en-GB", "en-US"].compactMap { SFSpeechRecognizer(locale: Locale(identifier: $0)) }
+        (VigilEdition.macy ? ["en-US"] : ["en-GB", "en-US"]).compactMap { SFSpeechRecognizer(locale: Locale(identifier: $0)) }
             .first { $0.isAvailable && $0.supportsOnDeviceRecognition }
     }
     static var availability: [[String: Any]] {
@@ -54,7 +55,7 @@ import AVFoundation
             message = "Enable Microphone and Speech Recognition in the introduction."; return
         }
         guard let recognizer = Self.availableRecognizer else {
-            message = "On-device English speech is unavailable for en-GB and en-US. Download English Dictation in macOS Keyboard settings, then restart listening."; return
+            message = "On-device English speech is unavailable. Download English Dictation in your device’s keyboard settings, then restart listening."; return
         }
         let token = generation
         self.recognizer = recognizer
@@ -111,19 +112,22 @@ import AVFoundation
             }
             let input = engine.inputNode, format = input.outputFormat(forBus: 0)
             guard format.sampleRate > 0, format.channelCount > 0 else { throw WakeFailure.noInput }
+            let meter = VigilInputMeter()
             input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self, weak request] buffer, _ in
                 request?.append(buffer)
                 if let data = buffer.floatChannelData?[0] {
                     var peak: Float = 0
                     for index in 0..<Int(buffer.frameLength) { peak = max(peak, abs(data[index])) }
+                    guard let batch = meter.observe(peak: peak) else { return }
                     Task { @MainActor [weak self] in
                         guard let self, self.generation == token else { return }
-                        self.inputBuffers += 1; self.maximumInputPeak = max(self.maximumInputPeak, peak)
-                        if self.inputBuffers.isMultiple(of: 5) {
-                            self.inputPeak = peak
-                            if self.inputBuffers > 150 && self.maximumInputPeak < 0.00001 {
-                                self.message = "Microphone is delivering silence. Check macOS Sound → Input and speak near the selected mic."
-                            }
+                        self.inputBuffers = batch.buffers; self.maximumInputPeak = batch.maximum
+                        if self.meteringRequested || Date() < self.armedUntil {
+                            if self.inputPeak != batch.peak { self.inputPeak = batch.peak }
+                        }
+                        let silent = "Microphone is delivering silence. Check macOS Sound → Input and speak near the selected mic."
+                        if batch.buffers > 150 && batch.maximum < 0.00001 && self.message != silent {
+                            self.message = silent
                         }
                     }
                 }
@@ -144,7 +148,7 @@ import AVFoundation
             }
         } catch {
             stop(); let failure = error as NSError; lastError = "\(failure.domain) \(failure.code)"
-            message = "Microphone unavailable (\(failure.code)). Check macOS Sound → Input, then Restart listening."
+            message = "Microphone unavailable (\(failure.code)). Check your device’s microphone settings, then restart listening."
         }
     }
     func stop() {

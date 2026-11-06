@@ -8,9 +8,215 @@ import CoreAudio
 import Carbon
 import ApplicationServices
 
-/// Explicit bounded evidence modes: silent cloud previews, or an authorised
-/// local hardware check. Neither mode sends a provider request.
+/// Explicit bounded evidence modes. Cloud previews are silent; requested local
+/// acceptance checks use synthetic evidence and the ordinary free-provider path.
 @MainActor enum VigilFeatureProof {
+    /// Opt-in installed-app acceptance: synthetic pixels and short real timer intervals.
+    /// The helper owns its window; it never activates or reads another application's UI.
+    static func beginAcceptanceCheck() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "--vigil-acceptance-check"), index + 1 < args.count else { return }
+        let folder = URL(fileURLWithPath: args[index + 1], isDirectory: true)
+        Task { @MainActor in
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
+                                                     attributes: [.posixPermissions: 0o700])
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            let controller = VoiceVisionController.shared, voice = VigilVoiceOutput.shared
+            let host = VigilCharacterHost.shared
+            let wasVisible = host.visible
+            let externalFixture = args.contains("--vigil-external-image-fixture")
+            let helper = Process()
+            var timed: VigilSupportController?
+            var result: [String: Any] = ["build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?",
+                "outputBefore": VigilAudioRoute.snapshot().dictionary,
+                "input": AVCaptureDevice.default(for: .audio)?.localizedName ?? "unknown",
+                "audioDeviceWrites": false, "calendarWrites": false, "savedReminderWrites": false,
+                "scope": "installed native app, synthetic image and classification, real elapsed timer intervals"]
+            @MainActor func save(_ window: NSWindow?, _ name: String) {
+                guard let view = window?.contentView else { return }
+                view.layoutSubtreeIfNeeded(); view.displayIfNeeded()
+                guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                if let data = rep.representation(using: .png, properties: [:]) { try? data.write(to: folder.appendingPathComponent(name + ".png")) }
+            }
+            @MainActor func persist() {
+                if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
+                    try? data.write(to: folder.appendingPathComponent("acceptance-results.json"), options: .atomic)
+                }
+            }
+            defer {
+                timed?.stopTimedCheck()
+                if helper.isRunning { helper.terminate() }
+                VigilPointerContext.onCaptureForCheck = nil
+                voice.stop(); controller.dismissAnswer(); host.setFocusActivity(nil); host.setVisible(wasVisible)
+                controller.resumeListening()
+            }
+            controller.wake.stop(); voice.stop(); host.setVisible(true)
+            // No text or accessibility label: only three coloured shapes on white.
+            let image = NSImage(size: NSSize(width: 480, height: 320))
+            image.lockFocus()
+            NSColor.white.setFill(); NSRect(x: 0, y: 0, width: 480, height: 320).fill()
+            NSColor.systemRed.setFill(); NSBezierPath(ovalIn: NSRect(x: 35, y: 165, width: 115, height: 115)).fill()
+            NSColor.systemBlue.setFill()
+            let triangle = NSBezierPath(); triangle.move(to: NSPoint(x: 210, y: 165)); triangle.line(to: NSPoint(x: 350, y: 165)); triangle.line(to: NSPoint(x: 280, y: 290)); triangle.close(); triangle.fill()
+            NSColor.systemYellow.setFill(); NSRect(x: 115, y: 40, width: 260, height: 75).fill()
+            image.unlockFocus()
+            let png = folder.appendingPathComponent("synthetic-shapes.png")
+            if let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+               let data = bitmap.representation(using: .png, properties: [:]) { try? data.write(to: png) }
+            let fixtureScript = #"""
+            ObjC.import('AppKit'); ObjC.import('Foundation');
+            function run(argv) {
+                const app = $.NSApplication.sharedApplication; app.setActivationPolicy(1);
+                const point = $.NSEvent.mouseLocation;
+                const screens = $.NSScreen.screens;
+                let screen = screens.objectAtIndex(0);
+                for (let i=0; i<screens.count; i++) {
+                    const item = screens.objectAtIndex(i), f = item.frame;
+                    if (point.x>=f.origin.x && point.x<f.origin.x+f.size.width && point.y>=f.origin.y && point.y<f.origin.y+f.size.height) screen=item;
+                }
+                const frame = screen.frame;
+                const panel = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(frame,128,2,false);
+                panel.setTitle(''); panel.setLevel(1001); panel.setHidesOnDeactivate(false);
+                panel.setOpaque(true); panel.setBackgroundColor($.NSColor.whiteColor);
+                const view = $.NSView.alloc.initWithFrame($.NSMakeRect(0,0,frame.size.width,frame.size.height));
+                const picture = $.NSImageView.alloc.initWithFrame($.NSMakeRect(point.x-frame.origin.x-240,point.y-frame.origin.y-160,480,320));
+                picture.setImage($.NSImage.alloc.initWithContentsOfFile(argv[0])); picture.setImageScaling(1);
+                picture.setAccessibilityElement(false); view.setAccessibilityElement(false);
+                view.addSubview(picture); panel.setContentView(view); panel.orderFrontRegardless; panel.display;
+                $.NSString.stringWithString('ready').writeToFileAtomicallyEncodingError(argv[1],true,$.NSUTF8StringEncoding,null);
+                const end = Date.now()+90000;
+                while (Date.now()<end) $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.1));
+                panel.orderOut(null);
+            }
+            """#
+            let js = folder.appendingPathComponent("image-fixture.js"), ready = folder.appendingPathComponent("fixture-ready")
+            try? FileManager.default.removeItem(at: ready)
+            let overrideURL = folder.appendingPathComponent("image-fixture.override.js")
+            let script = (try? String(contentsOf: overrideURL, encoding: .utf8)) ?? fixtureScript
+            try? script.write(to: js, atomically: true, encoding: .utf8)
+            helper.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            helper.arguments = ["-l", "JavaScript", js.path, png.path, ready.path]
+            helper.standardOutput = FileHandle.nullDevice
+            let log = folder.appendingPathComponent("fixture.log")
+            FileManager.default.createFile(atPath: log.path, contents: nil)
+            helper.standardError = try? FileHandle(forWritingTo: log)
+            do {
+                if !externalFixture { try helper.run() }
+                for _ in 0..<40 {
+                    if FileManager.default.fileExists(atPath: ready.path) || (!externalFixture && !helper.isRunning) { break }
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                guard externalFixture || helper.isRunning, FileManager.default.fileExists(atPath: ready.path) else { throw RouterError.unavailable }
+                VigilPointerContext.onCaptureForCheck = { data in
+                    // Reject before networking unless the real crop contains all three fixture colors.
+                    guard let bitmap = NSBitmapImageRep(data: data) else { throw RouterError.unavailable }
+                    var red = 0, blue = 0, yellow = 0
+                    for y in stride(from: 0, to: bitmap.pixelsHigh, by: 4) {
+                        for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) {
+                            guard let c = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                            if c.redComponent > 0.6 && c.greenComponent < 0.45 && c.blueComponent < 0.45 { red += 1 }
+                            if c.blueComponent > 0.6 && c.redComponent < 0.45 { blue += 1 }
+                            if c.redComponent > 0.7 && c.greenComponent > 0.55 && c.blueComponent < 0.4 { yellow += 1 }
+                        }
+                    }
+                    guard red > 100, blue > 100, yellow > 100 else { throw RouterError.unavailable }
+                    try data.write(to: folder.appendingPathComponent("actual-pointer-crop.jpg"), options: .atomic)
+                }
+                controller.ask(.whatIsThis(""))
+                var playback: [[String: Any]] = []
+                for _ in 0..<750 {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    if voice.isPlaying {
+                        let route = VigilAudioRoute.snapshot()
+                        playback.append(["time": voice.playbackTime, "peakDBFS": voice.playbackPower, "device": voice.outputDevice,
+                                         "defaultDevice": route.uid ?? "default", "defaultRunning": route.running])
+                    }
+                    if !controller.busy && !voice.speaking { break }
+                }
+                result["image"] = ["context": controller.lastContextKind, "model": controller.lastModel,
+                    "answer": controller.answer, "status": controller.status, "playback": playback, "busyAfterWait": controller.busy,
+                    "cropSaved": FileManager.default.fileExists(atPath: folder.appendingPathComponent("actual-pointer-crop.jpg").path)]
+                save(controller.bubbleForCheck, "image-answer")
+            } catch { result["imageError"] = String(describing: error) }
+            if helper.isRunning { helper.terminate() }
+            try? "finished".write(to: folder.appendingPathComponent("image-phase-finished"), atomically: true, encoding: .utf8)
+            VigilPointerContext.onCaptureForCheck = nil
+            if controller.busy {
+                controller.cancel()
+                for _ in 0..<30 {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    if !controller.busy { break }
+                }
+            }
+            voice.stop(); controller.dismissAnswer(); controller.wake.stop(); persist()
+            // Same Timer -> tick -> warning/continuity -> queue -> real announcement, without real event edits.
+            let clock = VigilSupportController.timedCheck(); timed = clock
+            let began = Date(); clock.start()
+            var observed = 0, playback: [[String: Any]] = []
+            for _ in 0..<450 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                if voice.isPlaying {
+                    let route = VigilAudioRoute.snapshot()
+                    playback.append(["line": controller.answer, "time": voice.playbackTime,
+                        "peakDBFS": voice.playbackPower, "device": voice.outputDevice,
+                        "defaultDevice": route.uid ?? "default", "defaultRunning": route.running])
+                }
+                if clock.deliveredForCheck.count > observed {
+                    observed = clock.deliveredForCheck.count; save(controller.bubbleForCheck, "timed-nudge-\(observed)")
+                }
+                let lines = clock.deliveredForCheck.map(\.line)
+                if lines.contains(where: { $0.hasPrefix("Meeting") }) && lines.contains("Stand up. Drink water.") && !voice.speaking { break }
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            clock.stopTimedCheck()
+            result["timedNudges"] = ["tickSeconds": 0.25, "breakSeconds": 3, "meetingStartsAtSeconds": 8,
+                "meetingWarningSeconds": 3, "deliveries": clock.deliveredForCheck.map { ["line": $0.line, "afterSeconds": $0.at.timeIntervalSince(began)] as [String: Any] },
+                "playback": playback, "realCalendarEdited": false, "realRemindersEdited": false]
+            voice.stop(); controller.dismissAnswer(); controller.wake.stop(); persist()
+            // Exercise exactly the host hook called by accepted focus classifications and distraction checks.
+            var focusActivity = FocusActivity.onTask, distractionActivity = FocusActivity.offTask
+            var classificationSource = "synthetic classification inputs"
+            if let crop = try? Data(contentsOf: folder.appendingPathComponent("actual-pointer-crop.jpg")) {
+                do {
+                    let ai = VigilAI.shared
+                    // freeOnly uses the same explicit free-model gate as What is this, never Go credits.
+                    let focus = try await ai.classify(jpeg: crop, ocr: "", app: "Synthetic image-only fixture",
+                        task: "Review the colors and geometric shapes in this illustration.", freeOnly: true, permitsSend: { true })
+                    result["focusClassification"] = ["activity": focus.activity.rawValue, "confidence": focus.confidence, "model": ai.lastModel]
+                    let distraction = try await ai.classify(jpeg: crop, ocr: "", app: "Synthetic image-only fixture",
+                        task: "Read and edit a legal contract in a word processor.", freeOnly: true, permitsSend: { true })
+                    result["distractionClassification"] = ["activity": distraction.activity.rawValue, "confidence": distraction.confidence, "model": ai.lastModel]
+                    focusActivity = focus.activity; distractionActivity = distraction.activity
+                    classificationSource = "real free-vision classifications of the actual synthetic screenshot crop"
+                } catch { result["classificationError"] = String(describing: error) }
+            }
+            controller.effectAt = .distantPast; controller.answeredAt = .distantPast
+            host.setFocusActivity(focusActivity)
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            save(host.panel, "focus-asleep")
+            let startFrames = host.animator.renderedFrames, startTicks = host.cursor.animatedTicks
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            result["focusSleep"] = ["mood": host.sampledFace.mood.rawValue, "paused": host.animator.animationPaused,
+                "pointerAnimationAllowed": host.cursor.pointerAnimationAllowed(),
+                "inputActivity": focusActivity.rawValue, "inputSource": classificationSource,
+                "framesInFiveSeconds": host.animator.renderedFrames - startFrames,
+                "overlayDrawsInFiveSeconds": host.cursor.animatedTicks - startTicks]
+            host.setFocusActivity(distractionActivity)
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            save(host.panel, "distraction-awake")
+            result["distractionWake"] = ["mood": host.sampledFace.mood.rawValue, "pausedDuringTransition": host.animator.animationPaused,
+                "pointerAnimationAllowed": host.cursor.pointerAnimationAllowed()]
+            host.setVisible(false)
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            let hiddenFrames = host.animator.renderedFrames, hiddenTicks = host.cursor.animatedTicks
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            result["hidden"] = ["framesInThreeSeconds": host.animator.renderedFrames - hiddenFrames,
+                "overlayDrawsInThreeSeconds": host.cursor.animatedTicks - hiddenTicks, "paused": host.animator.animationPaused]
+            result["outputAfter"] = VigilAudioRoute.snapshot().dictionary
+            result["finishedAt"] = ISO8601DateFormatter().string(from: Date()); persist()
+        }
+    }
     /// Authorised native QA: synthetic screen text and real speaker-to-C922 commands.
     static func beginPolishCheck() {
         let args = ProcessInfo.processInfo.arguments
@@ -99,7 +305,7 @@ import ApplicationServices
             let mouse = NSEvent.mouseLocation
             let fixture = NSPanel(contentRect:CGRect(x:mouse.x-180,y:mouse.y-70,width:360,height:140),styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
             fixture.title="Vigil synthetic QA item";fixture.level = .floating;fixture.hidesOnDeactivate=false
-            let field=NSTextField(labelWithString:"A blue folder labelled Meeting notes. This is synthetic test content.")
+            let field=NSTextField(labelWithString:"A blue folder labeled Meeting notes. This is synthetic test content.")
             field.frame=CGRect(x:0,y:0,width:360,height:140);field.alignment = .center;field.font = .systemFont(ofSize:18);field.backgroundColor = .windowBackgroundColor;field.drawsBackground = true
             fixture.contentView=field;fixture.orderFrontRegardless()
             let previousWake=wake.onWake, previousCommand=wake.onCommand

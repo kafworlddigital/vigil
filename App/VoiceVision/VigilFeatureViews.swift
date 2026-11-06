@@ -16,7 +16,8 @@ struct VigilAnswerBubble: View {
                 if controller.busy { Button("Cancel") { controller.cancel() } }
                 else { Button { controller.dismissAnswer() } label: { Image(systemName: "xmark") }.accessibilityLabel("Dismiss answer") }
             }
-            if controller.voiceNeedsPermission && controller.answer.isEmpty && controller.status != "Listening…" { VigilVoicePermissionCard() }
+            if controller.showCameraPermissionCard { VigilCameraPermissionCard() }
+            else if controller.voiceNeedsPermission && controller.answer.isEmpty && controller.status != "Listening…" { VigilVoicePermissionCard() }
             else if controller.showShortcutCard {
                 Label("Press \(controller.hotKeyLabel) to speak", systemImage: "keyboard").font(.headline)
                 Text("Or click my face. Change the shortcut in Settings.").font(.caption)
@@ -26,6 +27,23 @@ struct VigilAnswerBubble: View {
         }.padding(14).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(.primary.opacity(0.1), lineWidth: 0.5))
             .accessibilityElement(children: .contain)
+    }
+}
+
+struct VigilCameraPermissionCard: View {
+    @ObservedObject private var controller = VoiceVisionController.shared
+    @State private var requesting = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Let Vigil see your question", systemImage: "camera").font(.headline)
+            Text("Allow your camera and microphone once. Only when you ask, Vigil records four seconds, then turns them off. Three small pictures and recognized words go securely to Vigil’s brain. The clip is deleted after the answer unless you choose to keep it.")
+                .font(.callout).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Not now") { controller.cancelCameraPermission() }
+                Button("Allow") { requesting = true; Task { await controller.allowCameraFeature(); requesting = false } }
+                    .buttonStyle(.borderedProminent).disabled(requesting)
+            }
+        }
     }
 }
 
@@ -115,7 +133,7 @@ struct VigilVoiceBar: View {
                 Button("Ask") { sendCommand() }.disabled(typedCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.busy)
             }
             #if os(iOS)
-            if controller.busy || !controller.answer.isEmpty || !controller.status.isEmpty { VigilAnswerBubble() }
+            if controller.busy || !controller.answer.isEmpty || !controller.status.isEmpty || controller.showCameraPermissionCard { VigilAnswerBubble() }
             #endif
         }
     }
@@ -143,6 +161,14 @@ struct VigilFeatureSettings: View {
             Toggle("Spoken nudges and answers", isOn: $spoken).onChange(of: spoken) { _, value in
                 if !value { VigilVoiceOutput.shared.stop(); controller.resumeListening() }
             }
+            if VigilEdition.macy {
+                HStack {
+                    Text("Natural US English · Vigil brain")
+                    Spacer()
+                    Button("Preview") { controller.previewVoice() }.accessibilityIdentifier("features.voicePreview")
+                }
+                Text("Your private connection is set up automatically. Speech is generated on Vigil’s server and cached for quick playback. No keys needed. Audio follows your device’s current output.").font(.caption).foregroundStyle(.secondary)
+            } else {
             HStack {
                 Picker("Voice", selection: $voice) {
                     Text("Automatic · best natural English").tag("")
@@ -152,12 +178,13 @@ struct VigilFeatureSettings: View {
                 Button("Preview") { controller.previewVoice() }.accessibilityIdentifier("features.voicePreview")
             }
             Text("Automatic prefers installed Apple Premium or Enhanced English. Otherwise free neural speech runs on your Contabo server and is cached. Apple's best installed voice works offline.").font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Text("Volume"); Slider(value: $volume, in: 0...1)
                 Text("\(Int(volume * 100))%").monospacedDigit().frame(width: 45)
             }
-            Text("Apple's installed voices are free. Short nudges say ‘Back to it’, ‘Focus’ or ‘One thing’. Silence mode turns speech off.").font(.caption).foregroundStyle(.secondary)
-            Text("Volume controls both chime and speech. Zero means silent. Colour flash uses your companion colour.").font(.caption).foregroundStyle(.secondary)
+            Text("Short nudges say ‘Back to it’, ‘Focus’ or ‘One thing’. Turn spoken nudges off for silence.").font(.caption).foregroundStyle(.secondary)
+            Text("Volume controls both chime and speech. Zero means silent. Color glow uses your companion color.").font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("Sound check") { controller.soundCheck() }
                     .disabled(controller.soundCheckRunning).accessibilityIdentifier("features.soundCheck")
@@ -166,9 +193,13 @@ struct VigilFeatureSettings: View {
             #if os(macOS)
             Text("Output: \(controller.audioOutputName)").font(.caption).foregroundStyle(.secondary)
             #endif
-            ProgressView(value: min(1, Double(wake.inputPeak) * 8)) {
-                Text(wake.listening ? "Microphone level" : "Microphone off").font(.caption)
-            }.accessibilityIdentifier("features.microphoneLevel")
+            if controller.soundCheckRunning {
+                ProgressView(value: min(1, Double(wake.inputPeak) * 8)) {
+                    Text(wake.listening ? "Microphone level" : "Microphone off").font(.caption)
+                }.accessibilityIdentifier("features.microphoneLevel")
+            } else {
+                Text(wake.listening ? "Microphone on · Sound check shows its live level." : "Microphone off").font(.caption).foregroundStyle(.secondary)
+            }
             if !controller.soundCheckMessage.isEmpty { Text(controller.soundCheckMessage).font(.caption).fixedSize(horizontal: false, vertical: true) }
             Divider()
             if controller.voiceNeedsPermission { VigilVoicePermissionCard() }
@@ -198,10 +229,12 @@ struct VigilFeatureSettings: View {
 }
 
 struct VigilTryEverything: View {
+    @ObservedObject private var support = VigilSupportController.shared
     @ObservedObject private var controller = VoiceVisionController.shared
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Try everything").font(.title2.weight(.semibold))
+            if support.showCameraPermission { VigilTiredPermissionCard() }
             Text("Short previews. Reminder, meeting and break tests don't change your saved reminders, calendar or switches.").font(.caption).foregroundStyle(.secondary)
             VigilNudgeTestButtons()
             HStack {
@@ -244,12 +277,22 @@ struct VigilFeatureIntroduction: View {
     @State private var page = 0
     @State private var requesting = false
     init(initialPage: Int = 0) { _page = State(initialValue: min(Self.cards.count - 1, max(0, initialPage))) }
-    static let cards: [(String, String, String)] = [
-        ("Choose your nudge", "bell.badge", "Pick a chime, a little bounce, a colour flash, an eye wiggle or a spoken line. Try each in Settings. Motion stays around Vigil's face."),
+    static var cards: [(String, String, String)] {
+        if !VigilEdition.macy { return detailedCards }
+        return [
+            ("Focus with Vigil", "moon.zzz", "Choose one task. Vigil’s face sleeps while you focus and wakes when you drift. Pick a gentle nudge and color in Settings."),
+            ("Just ask", "mic", "Say ‘Vigil’ or ‘Virgil’, or click the face. On Mac, Control+Option+V starts listening. Ask ‘What is this?’, ‘Look at me’, or ‘I’m stuck’. Camera and microphone access start with an Allow card."),
+            ("A little help on time", "timer", "Say ‘Remind me in 10 minutes to stretch’. You can also turn on meeting warnings, break nudges, and an optional private tired check in Settings."),
+            ("Your choices", "slider.horizontal.3", "Open Settings from the menu bar, right-click the Mac face, or press Command+comma. Try everything previews each feature. Voice follows your device’s current sound output."),
+            ("Ready when you are", "hand.raised", "No API keys or account setup. Answers and natural speech use Vigil’s secure brain. Wake words stay on your device. Camera clips start only when you ask; tired checks are off until you choose them. Allow voice now, or try it later.")
+        ]
+    }
+    static let detailedCards: [(String, String, String)] = [
+        ("Choose your nudge", "bell.badge", "Pick a chime, a little bounce, a color glow, an eye wiggle or a spoken line. Try each in Settings. Motion stays around Vigil's face."),
         ("A few quiet words", "speaker.wave.2", "‘Back to it.’ ‘Focus.’ ‘One thing.’ Automatic uses natural Apple English or cached free neural speech from your server. Preview the voice in Settings, or switch speech off."),
         ("Vigil, what is this?", "cursorarrow.rays", "On Mac, point at something and ask. Vigil reads Accessibility text first, or sends a small cursor crop. You hear one sentence and see a bubble by the face. Other apps stay private on iPhone and iPad."),
         ("A small celebration", "sparkles", "A short sparkle around the face and a light haptic tap mark an answer. Haptics depend on your hardware; Reduce Motion uses a gentle glow."),
-        ("Vigil, look at me", "camera", "Only your request starts a video clip. A visible indicator stays on during the four-second video and audio clip. Ask your question while it records. Only three small frames and locally recognised words are sent. The temporary clip is removed after the answer unless you enable saving."),
+        ("Vigil, look at me", "camera", "Only your request starts a video clip. A visible indicator stays on during the four-second video and audio clip. Ask your question while it records. Only three small frames and locally recognized words are sent. The temporary clip is removed after the answer unless you enable saving."),
         ("Vigil, I’m stuck", "arrow.right.circle", "Say or type ‘Vigil, I’m stuck’ for one small next step on your current focus task. Free non-OpenAI models fail over automatically; a simple local step is always available. Switch it off in Settings."),
         ("Remind me in a few minutes", "timer", "Say or type ‘Vigil, remind me in 10 minutes to send the draft’. Vigil saves the reminder locally, nudges and speaks when due while open. Background or closed apps use an Apple notification; speech needs Vigil running. Manage or cancel reminders in Settings."),
         ("Meeting in 5 minutes", "calendar", "Enable meeting warnings in Settings and allow Calendar once. Vigil reads meeting titles locally and gives a five-minute heads-up. No calendar information goes to a model; no events are changed."),
@@ -289,12 +332,13 @@ struct VigilFeatureIntroduction: View {
 
 /// Lightweight native Canvas particles; one bounded burst and no particle engine.
 struct VigilFaceEffects: ViewModifier {
+    let date: Date
+    init(date: Date) { self.date = date }
     @ObservedObject private var controller = VoiceVisionController.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
-        TimelineView(.animation) { timeline in
-            let age = timeline.date.timeIntervalSince(controller.effectAt)
-            let burst = timeline.date.timeIntervalSince(controller.answeredAt)
+            let age = date.timeIntervalSince(controller.effectAt)
+            let burst = date.timeIntervalSince(controller.answeredAt)
             let wave = age >= 0 && age < 1.6 ? sin(age * .pi * 4) * (1 - age / 1.6) : 0
             content
                 .offset(y: !reduceMotion && controller.effect == .bounce ? -abs(wave) * 18 : 0)
@@ -316,7 +360,6 @@ struct VigilFaceEffects: ViewModifier {
                     }
                     }.allowsHitTesting(false)
                 }
-        }
     }
 }
 #endif

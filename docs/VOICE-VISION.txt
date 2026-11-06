@@ -20,7 +20,9 @@ Implemented source
 
 Edition boundary
 Only the Keith Mac and iOS targets define VIGIL_VOICE_VISION.
-Macy targets exclude App/VoiceVision and retain their existing capabilities and UI.
+On macy-features, both Macy targets now include App/VoiceVision, with VIGIL_MACY
+and their own entitlements. Generated answers and speech use vigil-brain only;
+see MACY-FEATURES.md for the edition-specific US English and privacy behaviour.
 Shared brain changes retain focus classification by default; question requests require a Keith token.
 The new question route refuses non-free OpenRouter model IDs and retains existing provider restrictions.
 No keys, tokens, private prompts or captures are committed. Screen privacy guards remain in place.
@@ -30,7 +32,8 @@ Completed checks
 The harness uses official Swift Crypto in place of CryptoKit on Linux only.
 11 stateless-brain tests, including first-two-provider failures, visual questions and focus JSON validation.
 37 app/core Swift files pass syntax parsing only; this does not establish native type correctness.
-Keith/Macy feature-condition and source-exclusion checks pass.
+The source guard checks both feature targets, Macy's separate entitlements and
+compile-time Tuck exclusion. Native archives remain a separate release gate.
 
 Delivery blocker
 GitHub API rejects native workflow dispatch with HTTP 422:

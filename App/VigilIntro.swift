@@ -25,9 +25,9 @@ struct VigilIntroView:View {
     }
     private var detail:String {
         switch page {
-        case 0:return "A small friend in the corner of your screen. Here to help you stay on one task."
+        case 0:return "A simple focus tool. Vigil’s face sleeps while you focus and wakes when you drift."
         case 1:return "Pick one thing to do. Choose how long. Start."
-        case 2:return "Your cursor buddy points you back to your task."
+        case 2:return "When you drift, Vigil wakes and gently points you back to your task."
         case 3:return "Save stray ideas in the Parking Lot. Your task can keep its place."
         case 4:return "Free AI help. No setup. Just type a question."
         default:return "Change anything below. It saves as you go."
@@ -198,7 +198,7 @@ struct CompanionControls:View {
         if compact {
             Grid(alignment:.leading,horizontalSpacing:12,verticalSpacing:9){
                 GridRow{Text("Name").fontWeight(.semibold);TextField("Vigil",text:$name).textFieldStyle(.roundedBorder).frame(minHeight:34).accessibilityIdentifier("companion.name")}
-                GridRow{Text("Colour").fontWeight(.semibold);HStack(spacing:6){ForEach(CompanionColour.allCases,id:\.self){item in
+                GridRow{Text("Color").fontWeight(.semibold);HStack(spacing:6){ForEach(CompanionColour.allCases,id:\.self){item in
                     Button{colour=item.rawValue}label:{Circle().fill(LinearGradient(colors:item.colours.map{Color(hex:$0)},startPoint:.topLeading,endPoint:.bottomTrailing)).frame(width:28,height:28).padding(4).overlay{Circle().strokeBorder(colour==item.rawValue ? Color.primary:Color.clear,lineWidth:2)}}.buttonStyle(.plain).accessibilityLabel(item.title).accessibilityAddTraits(colour==item.rawValue ? .isSelected:[])
                 }}}
                 GridRow{Text("Nudges").fontWeight(.semibold);Picker("Nudge style",selection:$nudge){ForEach(CompanionNudge.allCases,id:\.self){Text($0.title).tag($0.rawValue)}}.pickerStyle(.segmented).labelsHidden()}
@@ -210,7 +210,7 @@ struct CompanionControls:View {
         VStack(alignment:.leading,spacing:16){
             HStack{Text("Name").font(.headline);TextField("Vigil",text:$name).textFieldStyle(.roundedBorder).accessibilityIdentifier("companion.name")}
             VStack(alignment:.leading,spacing:8){
-                HStack{Text("Colour").font(.headline);Spacer();Text((CompanionColour(rawValue:colour) ?? .blueberry).title).foregroundStyle(.secondary)}
+                HStack{Text("Color").font(.headline);Spacer();Text((CompanionColour(rawValue:colour) ?? .blueberry).title).foregroundStyle(.secondary)}
                 HStack(spacing:6){ForEach(CompanionColour.allCases,id:\.self){item in
                     Button{colour=item.rawValue}label:{
                         Circle().fill(LinearGradient(colors:item.colours.map{Color(hex:$0)},startPoint:.topLeading,endPoint:.bottomTrailing)).frame(width:36,height:36).padding(4)
@@ -291,7 +291,7 @@ struct VigilAskView:View {
                 request=Task{@MainActor in
                     defer{waiting=false}
                     do{
-                        let reply=try await VigilAI.shared.answer(ModelPrompt(system:"Help with the user's question in clear, brief British English. Be practical and honest about uncertainty. You have no tools and cannot act on their device.",text:text))
+                        let reply=try await VigilAI.shared.answer(ModelPrompt(system:"Help with the user's question in clear, brief US English. Be practical and honest about uncertainty. You have no tools and cannot act on their device.",text:text))
                         guard !Task.isCancelled else{return}
                         answer=reply.local ? "AI help is unavailable just now. Your timer and Parking Lot still work. Try again shortly.":reply.text
                     }catch{if !Task.isCancelled{answer="Couldn't reach AI help. Try again shortly."}}

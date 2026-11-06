@@ -14,7 +14,21 @@ import AppKit
     @Published var tiredMessage = "Tired check is off. No camera use."
     @Published private(set) var coverOpen = false
     @Published private(set) var checkingFrame = false
+    @Published var showCameraPermission = false
+    private var pendingCameraCheck = false
     var currentTask = ""
+    struct TimingCheck {
+        let meetingStart: Date
+    }
+    private let timingCheck: TimingCheck?
+    private var sentBreakForCheck = false
+    private(set) var deliveredForCheck: [(line: String, at: Date)] = []
+    private init(timingCheck: TimingCheck? = nil) { self.timingCheck = timingCheck }
+    static func timedCheck() -> VigilSupportController {
+        precondition(ProcessInfo.processInfo.arguments.contains("--vigil-acceptance-check"))
+        return VigilSupportController(timingCheck: TimingCheck(meetingStart: Date().addingTimeInterval(8)))
+    }
+    func stopTimedCheck() { timer?.invalidate(); timer = nil }
     private let store = EKEventStore()
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
@@ -33,28 +47,37 @@ import AppKit
     private var pendingAnnouncements: [String] = []
     private var reminderFile: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Vigil/voice-reminders.json")
+            .appendingPathComponent(VigilEdition.folder + "/voice-reminders.json")
     }
     func isEnabled(_ name: String) -> Bool {
-        UserDefaults.standard.object(forKey: "vigil.support." + name) as? Bool ?? ["stuck", "reminders", "break"].contains(name)
+        if timingCheck != nil { return ["meeting", "break"].contains(name) }
+        return UserDefaults.standard.object(forKey: "vigil.support." + name) as? Bool ?? ["stuck", "reminders", "break"].contains(name)
     }
     func start() {
-        guard !VigilEdition.macy, !VoiceVisionController.proofMode, timer == nil else { return }
-        if let data = try? Data(contentsOf: reminderFile), let saved = try? JSONDecoder().decode([VigilReminder].self, from: data) {
+        guard !VoiceVisionController.proofMode, timer == nil else { return }
+        if timingCheck == nil, let data = try? Data(contentsOf: reminderFile), let saved = try? JSONDecoder().decode([VigilReminder].self, from: data) {
             reminders = saved
         }
-        if !isEnabled("reminders") { cancelAllReminders() }
+        if timingCheck == nil, !isEnabled("reminders") { cancelAllReminders() }
         lastTick = ProcessInfo.processInfo.systemUptime
-        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
+        scheduleTimer()
+        if timingCheck != nil { return }
         #if os(macOS)
         let centre = NSWorkspace.shared.notificationCenter
         observers.append(centre.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.sleeping = true; self?.resetBreak(); self?.setCoverOpen(false) }
+            Task { @MainActor in self?.sleeping = true; self?.timer?.invalidate(); self?.timer = nil; self?.resetBreak(); self?.setCoverOpen(false) }
         })
         observers.append(centre.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.sleeping = false; self?.resetBreak(); self?.calendarAt = .distantPast }
+            Task { @MainActor in self?.sleeping = false; self?.resetBreak(); self?.calendarAt = .distantPast; self?.scheduleTimer() }
         })
         #endif
+    }
+    private func scheduleTimer() {
+        guard timer == nil else { return }
+        let interval = timingCheck == nil ? 5.0 : 0.25
+        let clock = Timer(timeInterval: interval, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
+        clock.tolerance = interval * 0.1
+        RunLoop.main.add(clock, forMode: .common); timer = clock
     }
     func setForeground(_ active: Bool) {
         foreground = active; resetBreak()
@@ -77,7 +100,7 @@ import AppKit
         guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else {
             calendarMessage = "Calendar access is off. Change it in system Settings if you want warnings."; return
         }
-        calendarMessage = "Five-minute warnings are on while Vigil runs. Calendar titles stay on-device."
+        calendarMessage = "Five-minute warnings are on while Vigil runs. Calendar checks stay on this device; spoken warnings use Vigil’s secure brain."
         calendarAt = .distantPast
     }
     func addReminder(minutes: Int, text: String) {
@@ -129,6 +152,9 @@ import AppKit
     }
     func setCoverOpen(_ value: Bool) {
         guard !VoiceVisionController.proofMode else { return }
+        if value, VigilEdition.macy, AVCaptureDevice.authorizationStatus(for: .video) != .authorized {
+            pendingCameraCheck = false; showCameraPermission = true; return
+        }
         coverOpen = value && isEnabled("tired") && foreground && !sleeping
         if !coverOpen {
             frameTask?.cancel(); camera?.cancel(); camera = nil; cues = 0
@@ -148,6 +174,9 @@ import AppKit
     }
     func tryTiredCheck() {
         guard !checkingFrame, !VoiceVisionController.shared.busy else { return }
+        if VigilEdition.macy, AVCaptureDevice.authorizationStatus(for: .video) != .authorized {
+            pendingCameraCheck = true; showCameraPermission = true; return
+        }
         frameTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.checkingFrame = false; self.frameTask = nil; self.camera = nil }
@@ -164,8 +193,16 @@ import AppKit
             } catch { self.tiredMessage = "Camera off · check unavailable. Nothing saved or sent." }
         }
     }
+    func allowTiredCamera() async {
+        if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined { _ = await AVCaptureDevice.requestAccess(for: .video) }
+        showCameraPermission = false
+        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
+            tiredMessage = "Camera access is off. You can change it in Settings whenever you’re ready."; return
+        }
+        if pendingCameraCheck { tryTiredCheck() } else { setCoverOpen(true) }
+    }
     private func tick() {
-        guard !VoiceVisionController.proofMode, !VigilEdition.macy else { return }
+        guard !VoiceVisionController.proofMode else { return }
         let uptime = ProcessInfo.processInfo.systemUptime, delta = uptime - lastTick; lastTick = uptime
         var available = foreground && !sleeping
         var idle: Double = 0
@@ -174,6 +211,7 @@ import AppKit
         available = available && console?["CGSSessionScreenIsLocked"] as? Bool != true && console?["kCGSessionOnConsoleKey"] as? Bool != false
         idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!)
         #endif
+        if timingCheck != nil { available = true; idle = 0 }
         if !available { resetBreak(); setCoverOpen(false); return }
         let now = Date()
         if isEnabled("reminders") {
@@ -187,32 +225,43 @@ import AppKit
                 }
             }
         }
-        if isEnabled("break") {
+        if isEnabled("break"), !(timingCheck != nil && sentBreakForCheck) {
             let minutes = UserDefaults.standard.object(forKey: "vigil.support.breakMinutes") as? Double ?? 50
-            if continuity.advance(seconds: delta, idle: idle, available: available, minutes: minutes) { enqueue("Stand up. Drink water.") }
+            if continuity.advance(seconds: delta, idle: idle, available: available, minutes: minutes, intervalSeconds: timingCheck == nil ? nil : 3) {
+                enqueue("Stand up. Drink water.")
+                if timingCheck != nil { sentBreakForCheck = true }
+            }
         } else { continuity.reset() }
-        if isEnabled("meeting"), now.timeIntervalSince(calendarAt) >= 20 { calendarAt = now; checkMeetings(now: now) }
+        if isEnabled("meeting"), now.timeIntervalSince(calendarAt) >= (timingCheck == nil ? 20 : 0.25) { calendarAt = now; checkMeetings(now: now) }
         if coverOpen, isEnabled("tired"), now.timeIntervalSince(tiredAt) >= 300, frameTask == nil,
            !VoiceVisionController.shared.busy, !VigilVoiceOutput.shared.speaking,
            AVCaptureDevice.authorizationStatus(for: .video) == .authorized { checkTired(now: now) }
         if !pendingAnnouncements.isEmpty, !VoiceVisionController.shared.busy, !VigilVoiceOutput.shared.speaking {
-            VoiceVisionController.shared.announce(pendingAnnouncements.removeFirst())
+            let line = pendingAnnouncements.removeFirst()
+            VoiceVisionController.shared.announce(line)
+            if timingCheck != nil { deliveredForCheck.append((line, now)) }
         }
     }
     private func enqueue(_ text: String) { if pendingAnnouncements.count < 50 { pendingAnnouncements.append(text) } }
     private func checkMeetings(now: Date) {
-        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return }
         warned = warned.filter { $0.value > now.addingTimeInterval(-86400) }
+        if let timingCheck {
+            considerMeeting(id: "synthetic-timed-meeting", title: "Synthetic timed meeting", start: timingCheck.meetingStart, now: now, warningSeconds: 3)
+            return
+        }
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return }
         let predicate = store.predicateForEvents(withStart: now, end: now.addingTimeInterval(301), calendars: nil)
         for event in store.events(matching: predicate).sorted(by: { $0.startDate < $1.startDate }) {
             guard !event.isAllDay, event.status != .canceled,
-                  !(event.attendees?.contains(where: { $0.isCurrentUser && $0.participantStatus == .declined }) ?? false),
-                  VigilMeetingPolicy.warningDue(start: event.startDate, now: now) else { continue }
-            let id = (event.calendarItemIdentifier) + ":" + String(event.startDate.timeIntervalSince1970)
-            guard warned[id] == nil else { continue }
-            warned[id] = now
-            enqueue("Meeting in 5 minutes: " + String((event.title ?? "Your meeting").prefix(160)))
+                  !(event.attendees?.contains(where: { $0.isCurrentUser && $0.participantStatus == .declined }) ?? false) else { continue }
+            let id = event.calendarItemIdentifier + ":" + String(event.startDate.timeIntervalSince1970)
+            considerMeeting(id: id, title: event.title ?? "Your meeting", start: event.startDate, now: now)
         }
+    }
+    private func considerMeeting(id: String, title: String, start: Date, now: Date, warningSeconds: TimeInterval = 300) {
+        guard VigilMeetingPolicy.warningDue(start: start, now: now, warningSeconds: warningSeconds), warned[id] == nil else { return }
+        warned[id] = now
+        enqueue((timingCheck == nil ? "Meeting in 5 minutes: " : "Meeting in a moment: ") + String(title.prefix(160)))
     }
     private func checkTired(now: Date) {
         tiredAt = now; checkingFrame = true; tiredMessage = "Camera on briefly · one on-device frame"
@@ -249,6 +298,7 @@ struct VigilSupportSettings: View {
     @AppStorage("vigil.support.breakMinutes") private var breakMinutes = 50.0
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if support.showCameraPermission { VigilTiredPermissionCard() }
             Divider(); Text("Small steps and reminders").font(.headline)
             Toggle("Next-step help · ‘Vigil, I’m stuck’", isOn: $stuck).onChange(of: stuck) { _, value in support.changed("stuck", enabled: value) }
             Toggle("Voice reminders", isOn: $reminders).onChange(of: reminders) { _, value in support.changed("reminders", enabled: value) }
@@ -270,6 +320,23 @@ struct VigilSupportSettings: View {
             Label(support.tiredMessage, systemImage: support.checkingFrame ? "camera.fill" : "camera").font(.caption).foregroundStyle(support.checkingFrame ? .primary : .secondary)
             Text("One frame every five minutes, never stored or uploaded. No microphone. A cover cannot be sensed reliably: close this control when closing it. Darkness is skipped. Cues are fallible. Backgrounding, sleep or lock clears cover confirmation.").font(.caption).foregroundStyle(.secondary)
         }
+    }
+}
+
+struct VigilTiredPermissionCard: View {
+    @ObservedObject private var support = VigilSupportController.shared
+    @State private var requesting = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("A private camera check", systemImage: "camera").font(.headline)
+            Text("Allow your camera once for a brief tired check. One frame stays on this device and is never saved or sent. Your microphone stays off. You’re always in control.")
+                .font(.callout).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Not now") { support.showCameraPermission = false }
+                Button("Allow") { requesting = true; Task { await support.allowTiredCamera(); requesting = false } }
+                    .buttonStyle(.borderedProminent).disabled(requesting)
+            }
+        }.padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
     }
 }
 #endif

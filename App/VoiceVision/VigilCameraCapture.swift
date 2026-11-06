@@ -42,7 +42,7 @@ final class VigilCameraCapture: NSObject, AVCaptureFileOutputRecordingDelegate, 
                         guard self.session.canAddOutput(self.movie) else { throw CameraFailure.unavailable }
                         self.session.addOutput(self.movie); self.session.commitConfiguration(); configuring = false
                         #if os(iOS)
-                        try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .videoRecording, options: [.defaultToSpeaker])
+                        try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .videoRecording, options: [])
                         try AVAudioSession.sharedInstance().setActive(true)
                         #endif
                         self.session.startRunning()
@@ -119,7 +119,7 @@ final class VigilCameraCapture: NSObject, AVCaptureFileOutputRecordingDelegate, 
     }
     @MainActor static func question(from url: URL) async -> String {
         guard SFSpeechRecognizer.authorizationStatus() == .authorized,
-              let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-GB")),
+              let recognizer = SFSpeechRecognizer(locale: Locale(identifier: VigilEdition.macy ? "en-US" : "en-GB")),
               recognizer.isAvailable, recognizer.supportsOnDeviceRecognition else { return "" }
         let job = CameraTranscription(recognizer: recognizer, url: url)
         return await job.run()

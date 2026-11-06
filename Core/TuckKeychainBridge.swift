@@ -5,6 +5,9 @@ enum TuckKeychainBridge {
     static let group="V892V3PC6T.com.kafworlddigital.tuck.shared"
     /// Never search the legacy login Keychain, which previously blocked Vigil's UI.
     static func refresh()->Int {
+        #if VIGIL_MACY
+        return 0
+        #else
         guard !VigilEdition.macy else{return 0}
         var items:[TuckCredentials.Item]=[]
         for service in ["com.kafworlddigital.tuck.vault.v1","com.kafworlddigital.tuck.vault.v1.versions.v2"] {
@@ -32,5 +35,6 @@ enum TuckKeychainBridge {
             do{try KeyVault.write(key,service:service);imported+=1}catch{continue}
         }
         return imported
+        #endif
     }
 }

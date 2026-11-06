@@ -7,10 +7,14 @@ import AppKit
 private struct VigilVoiceVisionIntegration: ViewModifier {
     @ObservedObject private var controller = VoiceVisionController.shared
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("vigil.intro.v2.completed") private var basicIntroductionComplete = false
     func body(content: Content) -> some View {
         content
             .task { controller.start() }
             .sheet(isPresented: $controller.showIntroduction) { VigilFeatureIntroduction() }
+            .onChange(of: basicIntroductionComplete) { _, completed in
+                if completed && VigilEdition.macy && !UserDefaults.standard.bool(forKey: "vigil.voice.introduced") { controller.showIntroduction = true }
+            }
             #if os(macOS)
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 controller.refreshVoicePermissions(); controller.resumeListening(); controller.updateBubble()

@@ -60,7 +60,12 @@ private struct VigilCharacter:View {
     @State private var animator=FaceAnimator()
     var body:some View {
         FaceView(animator:animator).frame(height:180).clipShape(RoundedRectangle(cornerRadius:22))
-            .onChange(of:listening,initial:true){_,held in animator.localMood=held ? .listening : nil}
+            .onChange(of:listening,initial:true){_,held in
+                animator.localMood=held ? .listening : nil
+                #if os(macOS)
+                animator.animationPaused = !held
+                #endif
+            }
     }
 }
 private struct HoldToTalk:View {

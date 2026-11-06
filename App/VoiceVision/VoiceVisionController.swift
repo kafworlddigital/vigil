@@ -254,7 +254,7 @@ import Carbon
             #endif
             try? await Task.sleep(nanoseconds: 800_000_000)
             VigilVoiceOutput.shared.speak("Vigil here.", entireLine: true, audition: true)
-            for _ in 0..<100 {
+            for _ in 0..<(VigilEdition.macy ? 550 : 100) {
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 if !VigilVoiceOutput.shared.speaking { break }
             }
@@ -262,7 +262,7 @@ import Carbon
             let route = VigilAudioRoute.snapshot()
             self.soundCheckMessage = route.muted == true ? "Output is muted in macOS."
                 : route.volume == 0 ? "Output volume is zero in macOS."
-                : VigilVoiceOutput.shared.playerStarted ? "Finished on \(route.name)." : "Speech playback failed. Try another Apple voice."
+                : VigilVoiceOutput.shared.playerStarted ? "Finished on \(route.name)." : VigilEdition.macy ? "Vigil’s voice connection isn’t ready. Your answer is still available as text." : "Speech playback failed. Try another Apple voice."
             #else
             self.soundCheckMessage = "Sound check finished."
             #endif

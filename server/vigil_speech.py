@@ -5,7 +5,9 @@ from piper import PiperVoice
 from piper.config import PiperConfig
 import onnxruntime
 
-model=Path('/srv/projects/vigil-private/piper/en_GB-alan-medium.onnx')
+language=sys.argv[2] if len(sys.argv)>2 else 'en-GB'
+assert language in ['en-GB','en-US']
+model=Path('/srv/projects/vigil-private/piper')/('en_US-ljspeech-high.onnx' if language=='en-US' else 'en_GB-alan-medium.onnx')
 options=onnxruntime.SessionOptions()
 options.intra_op_num_threads=1;options.inter_op_num_threads=1
 voice=PiperVoice(config=PiperConfig.from_dict(json.loads(Path(str(model)+'.json').read_text())),

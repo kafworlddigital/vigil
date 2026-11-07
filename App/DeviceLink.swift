@@ -137,7 +137,9 @@ final class PhoneDeviceLink:ObservableObject {
             if packet.command=="nudge",let text=packet.text {
                 self.message=text;self.nudge=text;self.face.localMood = .surprised
                 #if VIGIL_VOICE_VISION
-                if CompanionPreferences().nudge != .quiet { VigilFeedback.nudge() }
+                Task { @MainActor in
+                    if CompanionPreferences().nudge != .quiet { VigilFeedback.nudge() }
+                }
                 #else
                 VigilChirp.shared.play()
                 #endif

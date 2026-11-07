@@ -1,13 +1,92 @@
-import unittest,tempfile,time,json,io,urllib.error
+import unittest,tempfile,time,json,io,urllib.error,urllib.request,threading
 from unittest.mock import patch
 from pathlib import Path
-from vigil_brain import BrainRouter,Failure,DeviceRegistry,digest,enrol_device,NeuralSpeech
+from vigil_brain import BrainRouter,Failure,DeviceRegistry,digest,enrol_device,NeuralSpeech,macy_prompt,make_server,free_route
 
 def candidate(provider,model,vision=True):
  hosts={'opencode-go':'opencode.ai','openrouter':'openrouter.ai','nvidia':'integrate.api.nvidia.com'}
  return dict(provider=provider,model=model,vision=vision,endpoint='https://'+hosts[provider]+'/v1/chat/completions',protocol='chat')
 
 class BrainTests(unittest.TestCase):
+ def test_existing_friend_edition_keeps_free_focus_and_its_route_restrictions(self):
+  with tempfile.TemporaryDirectory() as folder:
+   private=Path(folder);registry=DeviceRegistry(private/'devices.json')
+   registry.state['tokens'][digest('synthetic-friend')]={'edition':'friend'}
+   flags=[]
+   class Router:
+    def complete(self,prompt,**kwargs):flags.append(kwargs);return {'text':'Synthetic answer.'}
+   class Speech:
+    def render(self,*args):raise AssertionError('Friend speech must remain forbidden')
+   server=make_server(private,registry,Speech(),Router(),port=0,monitor_models=False)
+   thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+   def post(route,data):
+    request=urllib.request.Request('http://127.0.0.1:'+str(server.server_port)+route,data=json.dumps(data).encode(),headers={'Authorization':'Bearer synthetic-friend','Content-Type':'application/json'})
+    return urllib.request.urlopen(request,timeout=5)
+   try:
+    with post('/answer',{'text':'Synthetic focus','purpose':'focus'}) as response:self.assertEqual(response.status,200)
+    self.assertEqual(flags,[{'free_only':True}])
+    for route,data in [('/answer',{'text':'Synthetic question','purpose':'question'}),('/speech',{'text':'Synthetic speech'})]:
+     with self.assertRaises(urllib.error.HTTPError) as error:post(route,data)
+     self.assertEqual(error.exception.code,403)
+   finally:server.shutdown();server.server_close();thread.join(timeout=5)
+ def test_production_model_filter_excludes_paid_and_stopped_routes_before_probing(self):
+  for provider,model in [('opencode-go','subscription'),('openrouter','vendor/paid'),('openrouter','anthropic/claude:free'),('nvidia','openai/gpt-oss')]:
+   self.assertFalse(free_route({'provider':provider,'model':model}))
+  for provider,model in [('nvidia','nemotron'),('ollama-cloud','gemma4:31b'),('openrouter','nemotron:free'),('opencode','fixture-free')]:
+   self.assertTrue(free_route({'provider':provider,'model':model}))
+ def test_authenticated_macy_http_answers_and_speech_without_weakening_auth(self):
+  with tempfile.TemporaryDirectory() as folder:
+   private=Path(folder);registry=DeviceRegistry(private/'devices.json')
+   registry.state['tokens'][digest('synthetic-macy')]={'edition':'macy'}
+   registry.state['tokens'][digest('synthetic-keith')]={'edition':'keith'}
+   prompts=[];languages=[]
+   class Router:
+    def complete(self,prompt):prompts.append(prompt);return {'text':'Synthetic answer.','local':False,'provider':'fixture','model':'fixture'}
+   class Speech:
+    def render(self,text,language):languages.append(language);return b'RIFF'+b'0'*100
+   server=make_server(private,registry,Speech(),Router(),port=0,monitor_models=False)
+   thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+   def post(route,token,data):
+    request=urllib.request.Request('http://127.0.0.1:'+str(server.server_port)+route,data=json.dumps(data).encode(),headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
+    return urllib.request.urlopen(request,timeout=5)
+   try:
+    for route in ['/answer','/speech']:
+     with self.assertRaises(urllib.error.HTTPError) as error:post(route,'untrusted',{'text':'Synthetic'})
+     self.assertEqual(error.exception.code,401)
+    with post('/answer','synthetic-macy',{'text':'Synthetic','purpose':'focus'}) as response:self.assertEqual(response.status,200)
+    self.assertEqual(prompts[-1]['purpose'],'question');self.assertIn('US English',prompts[-1]['system'])
+    with post('/speech','synthetic-macy',{'text':'Synthetic'}) as response:self.assertTrue(response.read().startswith(b'RIFF'))
+    self.assertEqual(languages[-1],'en-US')
+    with post('/answer','synthetic-keith',{'text':'Synthetic','purpose':'focus'}) as response:self.assertEqual(response.status,200)
+    self.assertEqual(prompts[-1]['purpose'],'focus')
+    with post('/speech','synthetic-keith',{'text':'Synthetic'}) as response:self.assertEqual(response.status,200)
+    self.assertEqual(languages[-1],'en-GB')
+   finally:server.shutdown();server.server_close();thread.join(timeout=5)
+ def test_macy_focus_uses_free_failover_and_us_english_without_mutating_request(self):
+  source={'text':'Task: synthetic focus','system':'Return classification JSON.','purpose':'focus','edition':'keith'}
+  prompt=macy_prompt(source)
+  self.assertEqual(source['purpose'],'focus')
+  self.assertEqual(prompt['purpose'],'question')
+  self.assertTrue(prompt['system'].endswith('Use US English.'))
+  calls=[]
+  models=[candidate('opencode-go','subscription'),candidate('openrouter','paid'),candidate('openrouter','one:free'),candidate('nvidia','two')]
+  def transport(model,*args):
+   calls.append(model['model'])
+   if model['model']=='one:free':raise Failure('429',time.time()+60)
+   return '{"choice":"on_task","p_on":1,"p_off":0,"p_uncertain":0}'
+  router=BrainRouter(models,{m['provider']:'synthetic' for m in models},transport)
+  for i,model in enumerate(models):router.health[router.id(model)].update(status='green',latency=i)
+  self.assertEqual(router.complete(prompt)['provider'],'nvidia')
+  self.assertEqual(calls,['one:free','two'])
+ def test_macy_us_speech_cache_is_separate_and_untrusted_locale_rejected(self):
+  with tempfile.TemporaryDirectory() as folder:
+   speech=NeuralSpeech(Path(folder));text='Synthetic speech.'
+   us=speech.cache/(digest('piper-ljspeech-v1:'+text)+'.wav');us.write_bytes(b'RIFF'+b'U'*100)
+   gb=speech.cache/(digest('piper-alan-v1:'+text)+'.wav');gb.write_bytes(b'RIFF'+b'B'*100)
+   with patch('vigil_brain.subprocess.run') as run:
+    self.assertEqual(speech.render(text,'en-US'),us.read_bytes())
+    self.assertEqual(speech.render(text),gb.read_bytes());run.assert_not_called()
+   with self.assertRaises(ValueError):speech.render(text,'../../untrusted')
  def test_neural_cache_reuses_audio_without_synthesis_and_has_bounded_names(self):
   with tempfile.TemporaryDirectory() as folder:
    speech=NeuralSpeech(Path(folder));text='Synthetic speech.'

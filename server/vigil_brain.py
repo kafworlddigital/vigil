@@ -9,19 +9,32 @@ def atomic(path,value):
     temp=path.with_suffix('.tmp');temp.write_text(json.dumps(value,indent=2));temp.chmod(0o600);temp.replace(path)
 def digest(value):return hashlib.sha256(value.encode()).hexdigest()
 
+def free_route(model):
+    if any(name in model['model'].lower() for name in ['openai','gpt','codex','anthropic','claude']):return False
+    return (model['provider'] in ['nvidia','ollama-cloud'] or
+            (model['provider']=='openrouter' and model['model'].endswith(':free')) or
+            (model['provider']=='opencode' and model['model'].endswith('-free')))
+
+def macy_prompt(data):
+    # The authenticated edition controls this, never an untrusted client field.
+    # The question route excludes paid/subscription models and retains failover.
+    return {**data,'purpose':'question','system':str(data.get('system',''))[:1800]+'\nUse US English.'}
+
 class NeuralSpeech:
     def __init__(self, private):
         self.cache=private/'speech-cache';self.cache.mkdir(mode=0o700,exist_ok=True)
         self.gate=threading.BoundedSemaphore(1)
-    def render(self,text):
+    def render(self,text,language='en-GB'):
         if not isinstance(text,str) or not 1<=len(text.strip())<=300:raise ValueError('invalid text')
+        if language not in ['en-GB','en-US']:raise ValueError('invalid language')
         if not self.gate.acquire(blocking=False):raise RuntimeError('busy')
         try:
-            path=self.cache/(digest('piper-alan-v1:'+text)+'.wav')
+            voice='piper-ljspeech-v1:' if language=='en-US' else 'piper-alan-v1:'
+            path=self.cache/(digest(voice+text)+'.wav')
             if not path.exists():
                 temp=path.with_suffix('.tmp')
                 try:
-                    result=subprocess.run([sys.executable,str(ROOT/'vigil_speech.py'),str(temp)],input=text.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=12,
+                    result=subprocess.run([sys.executable,str(ROOT/'vigil_speech.py'),str(temp),language],input=text.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=12,
                         env={**os.environ,'OMP_NUM_THREADS':'1','OPENBLAS_NUM_THREADS':'1'})
                     if result.returncode or not temp.exists() or not 44<temp.stat().st_size<2_000_000:raise RuntimeError('unavailable')
                     temp.chmod(0o600);temp.replace(path)
@@ -134,17 +147,14 @@ class BrainRouter:
             decision=dict(choice='on_task',p_on=.6,p_off=0,p_uncertain=.4) if matching>=2 else dict(choice='uncertain',p_on=0,p_off=0,p_uncertain=1)
             return dict(text=json.dumps(decision),provider='on-device',model='Local screen heuristic',local=True)
         return dict(text='One small step towards your task. Your timer and parking lot are ready when you are.',provider='on-device',model='Local reply',local=True)
-    def complete(self,prompt,blocked=frozenset(),budget=160):
+    def complete(self,prompt,blocked=frozenset(),budget=160,free_only=False):
         if prompt.get('purpose')=='question':budget=min(budget,45)
         deadline=time.monotonic()+budget
         with self.lock:byid={self.id(m):m for m in self.models};ranked=self.snapshot()
         for state in ranked:
             m=byid[state['id']]
-            if prompt.get('purpose')=='question':
-                free=(m['provider'] in ['nvidia','ollama-cloud'] or
-                      (m['provider']=='openrouter' and m['model'].endswith(':free')) or
-                      (m['provider']=='opencode' and m['model'].endswith('-free')))
-                if not free:continue
+            if free_only or prompt.get('purpose')=='question':
+                if not free_route(m):continue
             if m['provider'] in blocked or not self.keys.get(m['provider']) or self.reset(state)>time.time() or (prompt.get('image') and not m['vision']):continue
             if deadline-time.monotonic()<1:break
             started=time.monotonic()
@@ -176,16 +186,20 @@ class DeviceRegistry:
     def valid(self,token):
         with self.lock:return self.state['tokens'].get(digest(token))
 
-def serve():
-    private=PRIVATE;private.mkdir(mode=0o700,exist_ok=True)
-    keys=json.loads((private/'job3-keys.json').read_text())
-    registry=DeviceRegistry(private/'devices.json')
-    speech=NeuralSpeech(private)
-    router=BrainRouter(json.loads((ROOT/'models.json').read_text()),keys,state_path=private/'brain-health.json')
+def make_server(private=PRIVATE,registry=None,speech=None,router=None,port=8798,monitor_models=True):
+    private.mkdir(mode=0o700,exist_ok=True)
+    registry=registry or DeviceRegistry(private/'devices.json')
+    speech=speech or NeuralSpeech(private)
+    if router is None:
+        keys=json.loads((private/'job3-keys.json').read_text())
+        # Production probes must obey the same zero-cost boundary as answers.
+        # Keep unverified subscription/paid routes out of the monitor entirely.
+        models=[m for m in json.loads((ROOT/'models.json').read_text()) if free_route(m)]
+        router=BrainRouter(models,keys,state_path=private/'brain-health.json')
     def monitor():
         while True:
             router.probe_all();time.sleep(1800)
-    threading.Thread(target=monitor,daemon=True).start()
+    if monitor_models:threading.Thread(target=monitor,daemon=True).start()
     limits={};lock=threading.Lock();gate=threading.BoundedSemaphore(8)
     class Handler(http.server.BaseHTTPRequestHandler):
         server_version='Vigil'
@@ -222,8 +236,9 @@ def serve():
                 self.reply(200,{'token':token}) if token else self.reply(401,{'error':'invalid or expired activation code'});return
             if not registry.valid(self.headers.get('Authorization','').removeprefix('Bearer ')):self.reply(401,{'error':'auth'});return
             if self.path.endswith('/speech'):
-                if registry.valid(self.headers.get('Authorization','').removeprefix('Bearer ')).get('edition')!='keith':self.reply(403,{'error':'Keith edition only'});return
-                try:audio=speech.render(data.get('text') if isinstance(data,dict) else None)
+                edition=registry.valid(self.headers.get('Authorization','').removeprefix('Bearer ')).get('edition')
+                if edition not in ['keith','macy']:self.reply(403,{'error':'Keith or Macy edition only'});return
+                try:audio=speech.render(data.get('text') if isinstance(data,dict) else None,'en-US' if edition=='macy' else 'en-GB')
                 except ValueError:self.reply(400,{'error':'invalid speech'});return
                 except Exception:self.reply(503,{'error':'speech unavailable'});return
                 self.send_response(200);self.send_header('Content-Type','audio/wav');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(audio)));self.end_headers();self.wfile.write(audio);return
@@ -235,12 +250,17 @@ def serve():
             if not self.path.endswith('/answer'):self.reply(404,{'error':'unknown route'});return
             if not isinstance(data,dict) or not isinstance(data.get('text'),str) or len(data['text'])>14000:self.reply(400,{'error':'invalid prompt'});return
             if data.get('purpose','focus') not in ['focus','question']:self.reply(400,{'error':'invalid purpose'});return
-            if data.get('purpose')=='question' and registry.valid(self.headers.get('Authorization','').removeprefix('Bearer ')).get('edition')!='keith':self.reply(403,{'error':'Keith edition only'});return
+            edition=registry.valid(self.headers.get('Authorization','').removeprefix('Bearer ')).get('edition')
+            if edition=='macy':
+                data=macy_prompt(data)
+            elif data.get('purpose')=='question' and edition!='keith':self.reply(403,{'error':'Keith or Macy edition only'});return
             if data.get('mime','image/jpeg') not in ['image/jpeg','image/png']:self.reply(400,{'error':'invalid image'});return
             if not gate.acquire(blocking=False):self.reply(503,{'error':'busy, use app fallback'});return
-            try:self.reply(200,router.complete(data))
+            try:self.reply(200,router.complete(data,free_only=True) if edition=='friend' else router.complete(data))
             finally:gate.release()
-    server=http.server.ThreadingHTTPServer(('127.0.0.1',8798),Handler);server.daemon_threads=True;server.serve_forever()
+    server=http.server.ThreadingHTTPServer(('127.0.0.1',port),Handler);server.daemon_threads=True;return server
+
+def serve():make_server().serve_forever()
 def enrol_device(registry,data):
     from appstoreserverlibrary.signed_data_verifier import SignedDataVerifier
     from appstoreserverlibrary.models.Environment import Environment
@@ -264,7 +284,7 @@ def enrol_device(registry,data):
         if sum(v==digest(device) for v in claims.values())>4:raise ValueError('device bound')
         claims[claim]=digest(device)
         token=secrets.token_urlsafe(40)
-        registry.state['tokens'][digest(token)]={'edition':'macy' if '.vigil.m.' in bundle else 'keith','device':digest(device),'created':stamp()}
+        registry.state['tokens'][digest(token)]={'edition':'macy' if '.vigil.m.' in bundle else 'friend' if '.vigil.f.' in bundle else 'keith','device':digest(device),'created':stamp()}
         atomic(registry.path,registry.state)
         return token
 

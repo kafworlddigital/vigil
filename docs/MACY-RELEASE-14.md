@@ -1,0 +1,15 @@
+# Vigil for Macy — build 14 release record
+
+Build 14 uses separate iOS/macOS bundle IDs, US English, existing-brain answers and neural speech, no provider keys or Tuck access, the prepared idle improvements and explanatory permission cards. No Macy edition was installed on the delivery Mac or its attached devices.
+
+The Mac Release archive succeeded on its sole attempt. The package was signed with the existing distribution and installer identities. Exact-package checks found no credential overlaps, private database files or Tuck access group. Apple rejected the first package for unreadable embedded-profile permissions and an unsupported speech entitlement. Both packaging issues were fixed and the same compiled archive was packaged again. The corrected package uploaded successfully; Apple processing and external review are being read back.
+
+The sole iOS Release archive failed at App/DeviceLink.swift because a nudge callback called a main-actor method synchronously. The source now dispatches that call on the main actor. It has passed syntax and isolation checks; it has not had a second native archive. The one-archive-per-platform limit was preserved. iOS build 4 remains the currently available release; build 14 was not uploaded for iOS.
+
+Contabo deployment preserved a newer friend-edition enrolment/free-only restriction. The production model monitor now excludes unverified subscription/paid routes and stopped OpenAI/Anthropic routes before probing. Existing provider credentials were unchanged. US neural speech generated real non-silent WAV output without playback. An isolated synthetic Macy HTTP test injected two provider failures and received an actual answer from the third free provider; no production authentication state or health was changed by that test.
+
+Validation: 54 portable core tests, 18 server tests, both platform syntax checks, edition isolation and source diff checks passed. Mac native Release compilation, signing, installer verification and exact-artifact privacy checks passed. No simulator or real Macy-device acceptance was performed. Both dedicated DerivedData folders were removed.
+
+Continuation: the corrected iOS source needs a further authorised native archive, signing/audit/upload and external Macy group/review submission. Preserve the failed-archive receipts before a new attempt. For Mac, after processing is VALID run the prepared submit.py mac helper, which saves en-US What to Test, attaches the exact build to external Macy, submits review and independently checks saved notes/group membership.
+
+The private delivery folder contains HANDOFF.md with exact commands and live Apple readback. Build 4 review/invitation status should be refreshed through App Store Connect rather than inferred from this document.

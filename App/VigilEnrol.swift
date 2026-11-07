@@ -8,8 +8,8 @@ extension VigilAI {
         guard KeyVault.read(service:"com.kafworlddigital.vigil.brain")==nil else{return}
         let args=ProcessInfo.processInfo.arguments
         guard !args.contains("--vigil-proof"),!args.contains("--vigil-screen"),!args.contains("--vigil-renderer-fixture") else{return}
-        // A legacy receipt file is not guaranteed on iPhone TestFlight. Macy uses StoreKit's signed transaction directly.
-        if !VigilEdition.macy {
+        // A legacy receipt file is not guaranteed on iPhone TestFlight. Managed editions use StoreKit's signed transaction directly.
+        if !VigilEdition.managed {
             guard let receipt=Bundle.main.appStoreReceiptURL,FileManager.default.fileExists(atPath:receipt.path) else{return}
         }
         do {

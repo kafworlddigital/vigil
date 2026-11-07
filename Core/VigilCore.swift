@@ -66,12 +66,13 @@ public struct DailySummary: Sendable {
 /// File operations are serialised by the owner; atomic replacement preserves the existing Markdown.
 public final class ParkingLotWriter {
     public let url: URL
-    public init(url: URL) { self.url = url }
+    public let header: String
+    public init(url: URL, header: String = "Drifter-in-chief · Review on Sundays") { self.url = url; self.header = header }
     public func append(_ idea: ParkedIdea) throws {
         let manager = FileManager.default
         try manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let exists = manager.fileExists(atPath: url.path)
-        var previous = exists ? try String(contentsOf: url, encoding: .utf8) : "# Vigil · Parking Lot\n\nDrifter-in-chief · Review on Sundays\n"
+        var previous = exists ? try String(contentsOf: url, encoding: .utf8) : "# Vigil · Parking Lot\n\n\(header)\n"
         // Stable id makes retry after a failed cloud append idempotent.
         let marker = "<!-- vigil:\(idea.id.uuidString) -->"
         guard !previous.contains(marker) else { return }

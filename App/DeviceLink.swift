@@ -169,7 +169,7 @@ final class PhoneDeviceLink:ObservableObject {
     func send(_ command:String,text:String?=nil) {
         if command=="focusPark",let text,!text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
             let idea=ParkedIdea(text:text);outbox.append(idea);state.ideas.append(idea)
-            state.notice=connected ? "Parked for Sunday. Back to your task?":"Saved on this device. Your Mac will add it to iCloud when you reconnect."
+            state.notice=connected ? VigilCopy.parkedPhone:"Saved on this device. Your Mac will add it to iCloud when you reconnect."
             saveOutbox();flushOutbox();return
         }
         guard connected,fresh else { message="Connect your paired Mac first.";return }

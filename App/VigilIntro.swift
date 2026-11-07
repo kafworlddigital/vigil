@@ -17,7 +17,7 @@ struct VigilIntroView:View {
         switch page {
         case 0:return "Meet \(friend)."
         case 1:return "One task. Your timer."
-        case 2:return "A nudge when you drift."
+        case 2:return VigilEdition.friend ? "It sleeps while you focus." : "A nudge when you drift."
         case 3:return "Park it. Come back later."
         case 4:return "Ask \(friend) anything."
         default:return "Make \(friend) yours."
@@ -25,9 +25,9 @@ struct VigilIntroView:View {
     }
     private var detail:String {
         switch page {
-        case 0:return "A small friend in the corner of your screen. Here to help you stay on one task."
+        case 0:return VigilEdition.friend ? "A small face in the corner of your screen that helps you stay on one task." : "A small friend in the corner of your screen. Here to help you stay on one task."
         case 1:return "Pick one thing to do. Choose how long. Start."
-        case 2:return "Your cursor buddy points you back to your task."
+        case 2:return VigilEdition.friend ? "While you stay focused, the face dozes off. Drift away and it wakes up, pays attention and points you back to your task." : "Your cursor buddy points you back to your task."
         case 3:return "Save stray ideas in the Parking Lot. Your task can keep its place."
         case 4:return "Free AI help. No setup. Just type a question."
         default:return "Change anything below. It saves as you go."
@@ -133,7 +133,7 @@ struct IntroFeaturePicture:View {
                     }.foregroundStyle(.white)
                     Spacer(minLength:0)
                 }
-                IntroLivingFace(mood:page==2 ? .pointing:.listening,gaze:gaze)
+                IntroLivingFace(mood:page==2 ? .pointing:(VigilEdition.friend && page==1 ? .sleepy:.listening),gaze:gaze)
                     .frame(width:page==0 || page==5 ? min(220,width*0.56):120,height:page==0 || page==5 ? min(220,width*0.56)*390/844:56)
                     .frame(maxWidth:.infinity,maxHeight:.infinity,alignment:page==0 || page==5 ? (CompanionCorner(rawValue:corner) ?? .bottomRight).alignment:.bottomTrailing)
                     .padding(.top,34).padding(.horizontal,14).padding(.bottom,page==5 ? 8:14)
@@ -291,7 +291,7 @@ struct VigilAskView:View {
                 request=Task{@MainActor in
                     defer{waiting=false}
                     do{
-                        let reply=try await VigilAI.shared.answer(ModelPrompt(system:"Help with the user's question in clear, brief British English. Be practical and honest about uncertainty. You have no tools and cannot act on their device.",text:text))
+                        let reply=try await VigilAI.shared.answer(ModelPrompt(system:"Help with the user's question in clear, brief \(VigilCopy.english). Be practical and honest about uncertainty. You have no tools and cannot act on their device.",text:text))
                         guard !Task.isCancelled else{return}
                         answer=reply.local ? "AI help is unavailable just now. Your timer and Parking Lot still work. Try again shortly.":reply.text
                     }catch{if !Task.isCancelled{answer="Couldn't reach AI help. Try again shortly."}}

@@ -151,7 +151,7 @@ enum VigilPointing {
         guard !entry.text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else { return }
         state.ideas.append(entry);pendingIdeas.append(entry.id)
         savePending();sync();flushParkingLot()
-        state.notice="Parked for Sunday, drifter-in-chief. Back to your task?"
+        state.notice=VigilCopy.parkedMac
         notify(state.notice);sync()
     }
     private func flushParkingLot() {
@@ -160,7 +160,7 @@ enum VigilPointing {
         guard FileManager.default.fileExists(atPath:base.path) else {
             if !pendingIdeas.isEmpty { state.notice="Idea saved here. iCloud copy will catch up when available." };return
         }
-        let writer=ParkingLotWriter(url:base.appendingPathComponent(VigilEdition.folder+"/Parking Lot.md"))
+        let writer=ParkingLotWriter(url:base.appendingPathComponent(VigilEdition.folder+"/Parking Lot.md"),header:VigilCopy.parkingHeader)
         for id in pendingIdeas {
             guard let idea=state.ideas.first(where:{$0.id==id}) else { continue }
             do { try writer.append(idea);pendingIdeas.removeAll{$0==id} }

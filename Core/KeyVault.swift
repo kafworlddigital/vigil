@@ -26,7 +26,7 @@ enum KeyVault {
         guard status==errSecSuccess else { throw VaultError.saveFailed }
     }
     private static func base(_ service:String,_ account:String)->[String:Any] {
-        var query:[String:Any] = [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:(VigilEdition.macy && !service.contains(".vigil.m.") ? service.replacingOccurrences(of:"com.kafworlddigital.vigil.",with:"com.kafworlddigital.vigil.m."):service),kSecAttrAccount as String:account]
+        var query:[String:Any] = [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:(VigilEdition.macy && !service.contains(".vigil.m.") ? service.replacingOccurrences(of:"com.kafworlddigital.vigil.",with:"com.kafworlddigital.vigil.m."):VigilEdition.friend && !service.contains(".vigil.f.") ? service.replacingOccurrences(of:"com.kafworlddigital.vigil.",with:"com.kafworlddigital.vigil.f."):service),kSecAttrAccount as String:account]
         #if os(macOS)
         // Use the modern per-app store. A damaged legacy login keychain can
         // block SecItemCopyMatching on the main thread despite UI being disabled.
@@ -38,7 +38,7 @@ enum KeyVault {
     }
     #if os(macOS)
     static func importTuckIfAvailable()->Bool {
-        guard !VigilEdition.macy else { return false }
+        guard !VigilEdition.managed else { return false }
         // Optional legacy scans must never hold up the app's initial window.
         // Authorised provisioning imports connections into the per-app store.
         return read() != nil

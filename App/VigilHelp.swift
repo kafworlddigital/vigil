@@ -2,7 +2,13 @@ import SwiftUI
 
 struct VigilHelpView:View {
     @Environment(\.dismiss) private var dismiss
-    private let topics:[(String,String)]=[
+    private var topics:[(String,String)] {
+        let base=allTopics.map{topic in (topic.0,VigilEdition.friend ? topic.1.replacingOccurrences(of:" Macy's edition has separate data and per-device access; provider keys are never bundled or paired.",with:" Provider keys are never bundled in the app or shared between devices.") : topic.1)}
+        guard VigilEdition.friend else{return base}
+        return [("What Vigil does","Vigil is a focus companion. Tell it one task and start a timer. While you stay focused, the face dozes off. If you drift to something else, it wakes up, pays attention and gently points you back to your task."),
+                ("Getting started","There is nothing to set up. No account, no keys, no codes. AI help connects automatically on first launch using free models. If those are busy, Vigil switches to another one, and your timer and parking lot always keep working.")]+base
+    }
+    private let allTopics:[(String,String)]=[
         ("Focus sessions","Choose one task and a time, then press Start focus. Pause for a break or Finish when you're done. Your history shows the checks and ideas from each session."),
         ("The face","The Mac face follows your pointer. Hold Option and drag to move it; change its size in Settings. On a paired phone, the face keeps you company beside your screen. Prop the phone sideways below the monitor."),
         ("Pairing","On the Mac choose Pair. On your phone tap Pair and point the camera at the QR code. Keep both on the same Wi-Fi. Each edition has its own private pairing."),

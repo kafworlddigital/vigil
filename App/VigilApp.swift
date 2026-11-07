@@ -119,7 +119,7 @@ struct FocusDashboard:View {
                 let summary=DailySummary(sessions:sessions,ideas:state.ideas)
                 HStack(spacing:0){metric("\(summary.focusMinutes)","focus minutes");Divider();metric("\(summary.driftCount)","gentle nudges");Divider();metric("\(summary.parkedCount)","ideas parked")}.frame(height:70)
                 HStack{Button("Ask \(CompanionPreferences().name)"){showAsk=true}.buttonStyle(.borderedProminent);Spacer();Button("Focus history"){showHistory=true}}
-                Text("Work screens stay private. Ideas can wait for Sunday.").font(.caption).foregroundStyle(.secondary).frame(maxWidth:.infinity)
+                Text(VigilCopy.footer).font(.caption).foregroundStyle(.secondary).frame(maxWidth:.infinity)
             }.padding(24).frame(maxWidth:700).frame(maxWidth:.infinity)
         }.tint(Color(red:0.37,green:0.42,blue:0.71))
         .onAppear{speech.onResult=voice;calendar.refresh()}
@@ -151,7 +151,7 @@ struct FocusDashboard:View {
 struct ParkingView:View {
     var ideas:[ParkedIdea]
     @Environment(\.dismiss) private var dismiss
-    var body:some View{VStack(alignment:.leading,spacing:16){HStack{Text("Parking lot").font(.title2.weight(.semibold));Spacer();Button("Done"){dismiss()}};Text("Drifter-in-chief · Sunday review").font(.subheadline).foregroundStyle(.secondary);List(ideas.reversed()){idea in VStack(alignment:.leading,spacing:5){Text(idea.text);Text(idea.createdAt,format:.dateTime.weekday().hour().minute()).font(.caption).foregroundStyle(.secondary)}}}.padding(24).frame(minWidth:300,minHeight:400)}
+    var body:some View{VStack(alignment:.leading,spacing:16){HStack{Text("Parking lot").font(.title2.weight(.semibold));Spacer();Button("Done"){dismiss()}};Text(VigilCopy.parkingHeader).font(.subheadline).foregroundStyle(.secondary);List(ideas.reversed()){idea in VStack(alignment:.leading,spacing:5){Text(idea.text);Text(idea.createdAt,format:.dateTime.weekday().hour().minute()).font(.caption).foregroundStyle(.secondary)}}}.padding(24).frame(minWidth:300,minHeight:400)}
 }
 struct VigilSettingsView:View {
     var state:VigilState
@@ -178,10 +178,10 @@ struct VigilSettingsView:View {
             Button("Show intro again"){showIntro=true}
             CompanionControls()
             ModelHealthView()
-            Text("Your included Go plan, free models and on-device help. No OpenAI or GPT models.").font(.caption).foregroundStyle(.secondary)
+            Text(VigilCopy.modelsNote).font(.caption).foregroundStyle(.secondary)
             LabeledContent("Model in use",value:state.model)
-            LabeledContent("Running cost",value:String(format:"$%.2f",state.costUSD))
-            Text("Remote models use the included Go or free allowance. Limits never stop your timer.").font(.caption).foregroundStyle(.secondary)
+            LabeledContent("Running cost",value:VigilEdition.friend ? "Free":String(format:"$%.2f",state.costUSD))
+            Text(VigilCopy.limitsNote).font(.caption).foregroundStyle(.secondary)
             Button(testing ? "Testing connections…" : "Test connection"){
                 testing=true
                 Task { results=await ConnectionTester.run();testing=false }

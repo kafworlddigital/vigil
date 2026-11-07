@@ -1,0 +1,70 @@
+name: Vigil friend edition checks
+on:
+  push:
+    branches: [friend-edition]
+    paths-ignore: ['docs/**']
+  workflow_dispatch:
+defaults:
+  run:
+    shell: bash
+permissions:
+  contents: read
+concurrency: { group: vigil-friend, cancel-in-progress: true }
+jobs:
+  verify:
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate native project
+        run: |
+          command -v xcodegen || brew install xcodegen
+          xcodegen generate
+      - name: No personal wording in the friend edition
+        run: python3 scripts/check_friend_copy.py
+      - name: Verify approved icon
+        run: python3 scripts/check_icon.py
+      - name: Unit tests
+        run: swift test --jobs 2 2>&1 | tee unit-tests.log
+      - name: Friend iOS simulator Release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme VigilFriend -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/sim -jobs 3 CODE_SIGNING_ALLOWED=NO build > friend-simulator-build.log 2>&1 || (tail -60 friend-simulator-build.log; exit 1)
+      - name: Friend iOS device Release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme VigilFriend -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/device -jobs 3 CODE_SIGNING_ALLOWED=NO build > friend-device-build.log 2>&1 || (tail -60 friend-device-build.log; exit 1)
+      - name: Friend Mac Release build
+        run: xcodebuild -project Vigil.xcodeproj -scheme VigilFriendMac -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build/mac -jobs 3 CODE_SIGNING_ALLOWED=NO build > friend-mac-build.log 2>&1 || (tail -60 friend-mac-build.log; exit 1)
+      - name: Check bundle IDs, edition and versions
+        run: |
+          for p in build/device/Build/Products/Release-iphoneos/Vigil.app/Info.plist build/mac/Build/Products/Release/Vigil.app/Contents/Info.plist; do
+            /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' -c 'Print :VigilEdition' -c 'Print :CFBundleDisplayName' -c 'Print :CFBundleShortVersionString' -c 'Print :CFBundleVersion' "$p"
+          done
+          /usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily' build/device/Build/Products/Release-iphoneos/Vigil.app/Info.plist
+      - name: Mac launch with first-run cards
+        run: |
+          codesign --force --deep --sign - build/mac/Build/Products/Release/Vigil.app
+          open -g -n build/mac/Build/Products/Release/Vigil.app
+          sleep 15
+          pgrep -f '/build/mac/Build/Products/Release/Vigil.app/Contents/MacOS/Vigil'
+          mkdir -p proofs; screencapture -x proofs/Friend-Mac-first-run.png || true
+          pkill -x Vigil || true
+      - name: iPhone and iPad launch proofs
+        run: python3 scripts/prove_release.py build/sim/Build/Products/Release-iphonesimulator/Vigil.app Friend
+      - name: Live free AI reply from outside Tailscale
+        env: { TOKEN: "${{ secrets.VIGIL_FRIEND_TEST_TOKEN }}" }
+        run: |
+          curl --fail -sS --max-time 25 https://hermes-ovh.tail33f19f.ts.net:8443/vigil/ready
+          echo
+          if [ -z "$TOKEN" ]; then echo "No test token; skipping live reply"; exit 0; fi
+          curl -sS --max-time 120 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"system":"One gentle plain English reminder to return to the task. At most 18 words.","text":"Task: write the first draft"}' \
+            https://hermes-ovh.tail33f19f.ts.net:8443/vigil/answer -o friend-answer.json
+          python3 -c 'import json;d=json.load(open("friend-answer.json"));print(d["provider"],d["model"],"local" if d["local"] else "remote");print(d["text"]);assert not d["local"]'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Vigil-friend-evidence
+          retention-days: 7
+          path: |
+            proofs/
+            *-build.log
+            unit-tests.log
+            friend-answer.json

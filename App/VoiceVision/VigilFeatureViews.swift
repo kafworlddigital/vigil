@@ -166,9 +166,13 @@ struct VigilFeatureSettings: View {
             #if os(macOS)
             Text("Output: \(controller.audioOutputName)").font(.caption).foregroundStyle(.secondary)
             #endif
-            ProgressView(value: min(1, Double(wake.inputPeak) * 8)) {
-                Text(wake.listening ? "Microphone level" : "Microphone off").font(.caption)
-            }.accessibilityIdentifier("features.microphoneLevel")
+            if controller.soundCheckRunning {
+                ProgressView(value: min(1, Double(wake.inputPeak) * 8)) {
+                    Text(wake.listening ? "Microphone level" : "Microphone off").font(.caption)
+                }.accessibilityIdentifier("features.microphoneLevel")
+            } else {
+                Text(wake.listening ? "Microphone on · Sound check shows its live level." : "Microphone off").font(.caption).foregroundStyle(.secondary)
+            }
             if !controller.soundCheckMessage.isEmpty { Text(controller.soundCheckMessage).font(.caption).fixedSize(horizontal: false, vertical: true) }
             Divider()
             if controller.voiceNeedsPermission { VigilVoicePermissionCard() }
@@ -289,12 +293,13 @@ struct VigilFeatureIntroduction: View {
 
 /// Lightweight native Canvas particles; one bounded burst and no particle engine.
 struct VigilFaceEffects: ViewModifier {
+    let date: Date
+    init(date: Date) { self.date = date }
     @ObservedObject private var controller = VoiceVisionController.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func body(content: Content) -> some View {
-        TimelineView(.animation) { timeline in
-            let age = timeline.date.timeIntervalSince(controller.effectAt)
-            let burst = timeline.date.timeIntervalSince(controller.answeredAt)
+            let age = date.timeIntervalSince(controller.effectAt)
+            let burst = date.timeIntervalSince(controller.answeredAt)
             let wave = age >= 0 && age < 1.6 ? sin(age * .pi * 4) * (1 - age / 1.6) : 0
             content
                 .offset(y: !reduceMotion && controller.effect == .bounce ? -abs(wave) * 18 : 0)
@@ -316,7 +321,6 @@ struct VigilFaceEffects: ViewModifier {
                     }
                     }.allowsHitTesting(false)
                 }
-        }
     }
 }
 #endif

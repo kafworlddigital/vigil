@@ -2,6 +2,58 @@ import XCTest
 @testable import VigilCore
 
 final class SupportTests: XCTestCase {
+    func testRealFreeVisionJSONFenceKeepsStrictClassificationValidation() {
+        let json = #"{"choice":"off_task","p_on":0.0,"p_off":1.0,"p_uncertain":0.0}"#
+        for opener in ["```json", "```"] {
+            let decision = FocusDecision.parseOrUncertain(Data((opener + "\n" + json + "\n```").utf8))
+            XCTAssertEqual(decision.activity, .offTask)
+            XCTAssertEqual(decision.confidence, 1)
+        }
+        for text in ["Explanation\n```json\n" + json + "\n```", "```python\n" + json + "\n```",
+                     "```json\n" + json + "\n```\nDo something else."] {
+            XCTAssertEqual(FocusDecision.parseOrUncertain(Data(text.utf8)).activity, .uncertain)
+        }
+    }
+    func testAudioMeterBatchesWithoutLosingBriefPeaks() {
+        let meter = VigilInputMeter()
+        XCTAssertNil(meter.observe(peak: 1.1))
+        for _ in 1..<11 { XCTAssertNil(meter.observe(peak: 0)) }
+        let first = meter.observe(peak: 0)
+        XCTAssertEqual(first?.buffers, 12)
+        XCTAssertEqual(first?.maximum, 1.1)
+        XCTAssertEqual(first?.peak, 1.1)
+        for _ in 0..<11 { XCTAssertNil(meter.observe(peak: 0.2)) }
+        let next = meter.observe(peak: .nan)
+        XCTAssertEqual(next?.buffers, 24)
+        XCTAssertEqual(next?.maximum, 1.1)
+        XCTAssertEqual(next?.peak, 0.2)
+    }
+    func testStillHiddenAndSleepingFacesDoNotUseAnimationClock() {
+        XCTAssertEqual(VigilFaceCadence.interval(visible: true, sleeping: false, animating: true, companions: false), 1.0 / 30)
+        XCTAssertEqual(VigilFaceCadence.interval(visible: true, sleeping: false, animating: false, companions: false), 1)
+        XCTAssertNil(VigilFaceCadence.interval(visible: false, sleeping: false, animating: true, companions: false))
+        XCTAssertEqual(VigilFaceCadence.interval(visible: false, sleeping: false, animating: false, companions: true), 1)
+        XCTAssertNil(VigilFaceCadence.interval(visible: true, sleeping: true, animating: true, companions: true))
+    }
+    func testWindowAndContainerNamesCannotReplaceImageEvidence() {
+        for role in ["AXWindow", "AXApplication", "AXGroup", "AXScrollArea", "", "AXUnknown"] {
+            XCTAssertFalse(VoiceVisionPolicy.pointerMetadataIsContent(role: role), role)
+        }
+        for role in ["AXImage", "AXStaticText", "AXButton", "AXLink"] {
+            XCTAssertTrue(VoiceVisionPolicy.pointerMetadataIsContent(role: role), role)
+        }
+    }
+    func testShortIntervalSeamDoesNotChangeNormalBreakOrMeetingBounds() {
+        var work = VigilWorkContinuity()
+        XCTAssertFalse(work.advance(seconds: 2, idle: 0, available: true, minutes: 50, intervalSeconds: 3))
+        XCTAssertTrue(work.advance(seconds: 1, idle: 0, available: true, minutes: 50, intervalSeconds: 3))
+        XCTAssertFalse(work.advance(seconds: 3, idle: 0, available: true, minutes: 0))
+        XCTAssertFalse(work.advance(seconds: 3, idle: 0, available: true, minutes: 50, intervalSeconds: .nan))
+        let now = Date()
+        XCTAssertFalse(VigilMeetingPolicy.warningDue(start: now.addingTimeInterval(4), now: now, warningSeconds: 3))
+        XCTAssertTrue(VigilMeetingPolicy.warningDue(start: now.addingTimeInterval(3), now: now, warningSeconds: 3))
+        XCTAssertFalse(VigilMeetingPolicy.warningDue(start: now, now: now, warningSeconds: 3))
+    }
     func testSpokenAndTypedSupportCommands() {
         XCTAssertEqual(VigilVoiceCommand.parse("Vigil, I’m stuck"), .stuck(""))
         XCTAssertEqual(VigilVoiceCommand.parse("Vigil I am stuck"), .stuck(""))

@@ -369,6 +369,9 @@ enum VigilAudioRoute {
         }
         VoiceVisionController.shared.effect = selected
         VoiceVisionController.shared.effectAt = Date()
+        #if os(macOS)
+        VigilCharacterHost.shared.cursor.requestAnimation(seconds: 2.6)
+        #endif
     }
     // Settings and the installed-app check deliberately share this action.
     static func testNudge(_ style: VigilNudgeStyle) { nudge(style) }

@@ -109,8 +109,13 @@ enum VigilPointing {
         VigilAI.shared.start()
         let nc=NSWorkspace.shared.notificationCenter
         observers.append(nc.addObserver(forName:NSWorkspace.willSleepNotification,object:nil,queue:.main){[weak self] _ in Task{@MainActor in self?.pause()} })
-        timer=Timer.scheduledTimer(withTimeInterval:1,repeats:true){[weak self] _ in Task{@MainActor in self?.tick()} }
         flushParkingLot();sync()
+    }
+    private func startClock() {
+        guard timer == nil else { return }
+        let clock = Timer(timeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
+        clock.tolerance = 0.2
+        RunLoop.main.add(clock, forMode: .common); timer = clock
     }
     func setConnected(_ connected:Bool) { if connected { sync() } }
     func start(task:String,minutes:Double) {
@@ -122,21 +127,22 @@ enum VigilPointing {
         state.session?.detail="First check in \(Int(settings.safeInterval)) seconds"
         policy=FocusNudgePolicy(maximumGap:settings.safeInterval*1.5)
         milestones=FocusMilestones();lastCheck=0;lastTick=ProcessInfo.processInfo.systemUptime
-        findMeeting();state.notice="One task. You've got company.";error="";sync()
+        VigilCharacterHost.shared.setFocusActivity(nil)
+        startClock();findMeeting();state.notice="One task. You've got company.";error="";sync()
     }
     func pause() {
         guard state.session?.status == .running else { return }
-        cancelWork();state.session?.pause("Taking a moment. Resume when you're ready.")
-        policy.reset();milestones.resetContinuity();sync()
+        cancelWork();timer?.invalidate();timer=nil;state.session?.pause("Taking a moment. Resume when you're ready.")
+        policy.reset();milestones.resetContinuity();VigilCharacterHost.shared.setFocusActivity(nil);sync()
     }
     func resume() {
         guard state.session?.status == .paused else { return }
         cancelWork();state.session?.resume();lastTick=ProcessInfo.processInfo.systemUptime
-        lastCheck=state.session?.elapsed ?? 0;findMeeting();sync()
+        lastCheck=state.session?.elapsed ?? 0;startClock();findMeeting();sync()
     }
     func end() {
         guard var session=state.session,session.status != .ended else { return }
-        cancelWork();session.end();state.session=session
+        cancelWork();timer?.invalidate();timer=nil;session.end();state.session=session;VigilCharacterHost.shared.setFocusActivity(nil)
         state.history.removeAll{$0.id==session.id};state.history.insert(session,at:0)
         state.history=Array(state.history.prefix(365));sync()
     }
@@ -238,6 +244,7 @@ enum VigilPointing {
         }
         guard let session=state.session else { return }
         if session.status == .ended {
+            timer?.invalidate();timer=nil;VigilCharacterHost.shared.setFocusActivity(nil)
             state.history.removeAll{$0.id==session.id};state.history.insert(session,at:0);cancelWork();sync();return
         }
         if Int(session.elapsed)%60==0 { flushParkingLot();findMeeting() }
@@ -264,6 +271,7 @@ enum VigilPointing {
                 let age=ProcessInfo.processInfo.systemUptime-captured
                 var check=FocusCheck(elapsed:state.session?.elapsed ?? session.elapsed,activity:age<=20 ? answer.activity : .unavailable,
                     probability:answer.probability,confidence:answer.confidence,probabilities:answer.probabilities,sampleDuration:settings.safeInterval)
+                VigilCharacterHost.shared.setFocusActivity(check.activity)
                 if policy.observe(check,age:age) {
                     let message=await VigilAI.shared.nudge(task:session.task,permitsSend:{ @Sendable [weak self] in
                             await MainActor.run { guard let self,self.generation==token else { return false }; return (try? WorkScreenGuard.check()) != nil }
@@ -278,6 +286,7 @@ enum VigilPointing {
             } catch {
                 guard generation==token,!Task.isCancelled else { return }
                 policy.reset()
+                VigilCharacterHost.shared.setFocusActivity(nil)
                 let privateSkip=(error as? RouterError) == .privateScreen
                 state.session?.checks.append(FocusCheck(elapsed:session.elapsed,activity:privateSkip ? .privateSkipped : .unavailable,sampleDuration:settings.safeInterval))
                 state.session?.detail=privateSkip ? "private (skipped)" : (error as? RouterError)?.localizedDescription ?? "Check unavailable. Your timer is still running."

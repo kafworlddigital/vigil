@@ -151,5 +151,17 @@ public struct FocusDecision: Equatable, Sendable {
         guard abs(on+off+unsure-1) < 0.02, let chosen=values[raw],chosen>=max(on,off,unsure) else { throw DecodeError.invalidAnswer }
         return FocusDecision(activity:activity,probability:off,confidence:chosen,probabilities:values)
     }
-    public static func parseOrUncertain(_ data:Data) -> FocusDecision { (try? decode(data)) ?? .uncertain }
+    public static func parseOrUncertain(_ data:Data) -> FocusDecision {
+        guard var text = String(data: data, encoding: .utf8) else { return .uncertain }
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        // Some free vision models wrap valid JSON. Unwrap only an entire matching
+        // JSON fence; arbitrary surrounding prose still fails the strict decoder.
+        if lines.count >= 3,
+           ["```", "```json"].contains(String(lines[0]).trimmingCharacters(in: .whitespacesAndNewlines)),
+           String(lines[lines.count - 1]).trimmingCharacters(in: .whitespacesAndNewlines) == "```" {
+            text = lines.dropFirst().dropLast().joined(separator: "\n")
+        }
+        return (try? decode(Data(text.utf8))) ?? .uncertain
+    }
 }

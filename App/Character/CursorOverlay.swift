@@ -1006,15 +1006,29 @@ final class CursorView: NSView {
 final class CursorOverlay: NSObject {
     let view = CursorView(frame: .zero)
     private var window: NSWindow?
-    private var displayLink: CADisplayLink?
+    private var timer: Timer?
+    private var interval: TimeInterval?
+    private var sleeping = false
+    private var faceVisible = true
+    private var animateUntil = 0.0
+    private var lastMouse: CGPoint?
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
     private var lastTime: CFTimeInterval = 0
+    private(set) var ticks = 0
+    private(set) var animatedTicks = 0
+    var onSample: (() -> Void)?
+    var needsAnimation: () -> Bool = { false }
+    var hasCompanions: () -> Bool = { false }
+    var pointerAnimationAllowed: () -> Bool = { true }
+    var isAnimating: Bool { CACurrentMediaTime() < animateUntil || needsAnimation() || view.caption != nil || mode != .following }
 
     /// Called every frame with the face the phone should show.
     var onFace: ((FaceState) -> Void)?
 
     var mode: CursorMode {
         get { view.engine.mode }
-        set { view.engine.setMode(newValue) }
+        set { view.engine.setMode(newValue); requestAnimation() }
     }
 
     /// Where the cursor rests when nobody is pointing: tucked away with eyes on your mouse, or parked above the phone.
@@ -1029,20 +1043,51 @@ final class CursorOverlay: NSObject {
                                                object: nil, queue: .main) { [weak self] _ in
             self?.makeWindow()
         }
-        // Driven by the display itself, so every frame is evenly paced.
-        let link = view.displayLink(target: self, selector: #selector(tick(_:)))
-        link.add(to: .main, forMode: .common)
-        displayLink = link
+        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged,
+                                          .leftMouseDown, .leftMouseUp, .flagsChanged]
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in self?.pointerEvent(event) }
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in self?.pointerEvent(event); return event }
+        requestAnimation()
+    }
+
+    private func pointerEvent(_ event: NSEvent) {
+        // Hit testing/Option-drag stays immediate even while the face is resting.
+        onSample?()
+        guard [.mouseMoved, .leftMouseDragged, .rightMouseDragged].contains(event.type), pointerAnimationAllowed() else { return }
+        requestAnimation()
     }
 
     func talkTest(seconds: Double = 3) {
         view.engine.talkUntil = CACurrentMediaTime() + seconds
+        requestAnimation(seconds: seconds)
     }
 
     func setSleeping(_ sleeping: Bool) {
-        displayLink?.isPaused = sleeping
+        self.sleeping = sleeping
         lastTime = 0
-        if sleeping { window?.orderOut(nil) } else { window?.orderFrontRegardless() }
+        if sleeping { window?.orderOut(nil); reschedule(nil) }
+        else { if faceVisible { window?.orderFrontRegardless() }; requestAnimation() }
+    }
+
+    func setFaceVisible(_ visible: Bool) {
+        faceVisible = visible
+        if visible && !sleeping { window?.orderFrontRegardless(); requestAnimation() }
+        else { window?.orderOut(nil); reschedule(VigilFaceCadence.interval(visible: false, sleeping: sleeping, animating: false, companions: hasCompanions())) }
+    }
+
+    func requestAnimation(seconds: Double = 0.8) {
+        animateUntil = max(animateUntil, CACurrentMediaTime() + seconds)
+        guard !sleeping else { return }
+        reschedule(VigilFaceCadence.interval(visible: faceVisible, sleeping: false, animating: true, companions: hasCompanions()))
+    }
+
+    private func reschedule(_ next: TimeInterval?) {
+        guard next != interval else { return }
+        timer?.invalidate(); timer = nil; interval = next
+        guard let next else { return }
+        let clock = Timer(timeInterval: next, repeats: true) { [weak self] _ in self?.tick() }
+        clock.tolerance = next < 0.1 ? 0.005 : 0.2
+        RunLoop.main.add(clock, forMode: .common); timer = clock
     }
 
     private func makeWindow() {
@@ -1059,20 +1104,26 @@ final class CursorOverlay: NSObject {
         window.level = .screenSaver
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         window.contentView = view
-        window.orderFrontRegardless()
+        if faceVisible && !sleeping { window.orderFrontRegardless() }
         self.window = window
     }
 
-    @objc private func tick(_ link: CADisplayLink) {
-        guard let window else { return }
-        let now = link.targetTimestamp
+    private func tick() {
+        guard let window, !sleeping else { return }
+        ticks += 1
+        let now = CACurrentMediaTime()
         let dt = lastTime == 0 ? 1.0 / 60 : min(max(now - lastTime, 1.0 / 480), 1.0 / 20)
         lastTime = now
         let eventPoint = CGEvent(source: nil)?.location ?? .zero
+        if let lastMouse, hypot(eventPoint.x - lastMouse.x, eventPoint.y - lastMouse.y) > 1.5, pointerAnimationAllowed() { animateUntil = now + 0.8 }
+        lastMouse = eventPoint
         let m = NSPoint(x: eventPoint.x, y: (NSScreen.screens.first?.frame.maxY ?? 0) - eventPoint.y)
         let f = window.frame
-        view.step(dt: dt, now: now, mouse: CGPoint(x: m.x - f.minX, y: f.maxY - m.y))
+        if faceVisible && isAnimating { animatedTicks += 1; view.step(dt: dt, now: now, mouse: CGPoint(x: m.x - f.minX, y: f.maxY - m.y)) }
+        else { view.engine.step(dt: dt, now: now, mouse: CGPoint(x: m.x - f.minX, y: f.maxY - m.y), bounds: view.bounds.size) }
+        onSample?()
         onFace?(view.engine.face(in: view.bounds.size, now: now))
+        reschedule(VigilFaceCadence.interval(visible: faceVisible, sleeping: sleeping, animating: isAnimating, companions: hasCompanions()))
     }
 }
 

@@ -228,6 +228,7 @@ import Carbon
         guard !soundCheckRunning, !Self.proofMode else { return }
         refreshVoicePermissions()
         soundCheckRunning = true; soundCheckMessage = "Chime, then ‘Vigil here.’"
+        wake.meteringRequested = true
         #if os(macOS)
         audioOutputName = VigilAudioRoute.snapshot().name
         #endif
@@ -257,6 +258,7 @@ import Carbon
             if self.voiceNeedsPermission { self.soundCheckMessage += " Allow voice access to check the microphone." }
             else if self.wake.inputPeak < 0.00001 { self.soundCheckMessage += " No microphone signal: check the input and speak near the mic." }
             self.soundCheckRunning = false
+            self.wake.meteringRequested = false
             if !self.enabled { self.wake.stop() }
             self.resumeListening()
         }
@@ -423,6 +425,7 @@ import Carbon
     }
     func updateBubble() {
         #if os(macOS)
+        VigilCharacterHost.shared.cursor.requestAnimation(seconds: 2.6)
         guard let face = VigilCharacterHost.shared.panel else { return }
         if answer.isEmpty && status.isEmpty && (!voiceNeedsPermission || !enabled) && !showShortcutCard { bubble?.orderOut(nil); return }
         let panel = bubble ?? NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
